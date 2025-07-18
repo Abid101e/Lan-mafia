@@ -1,15 +1,13 @@
-import { View } from "react-native";
+import React from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import HomeScreen from '../Screens/HomeScreen';
 
-export default function Index() {
+const App = () => {
   return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-     
-    </View>
+    <SafeAreaView style={{ flex: 1 }}>
+      <HomeScreen />
+    </SafeAreaView>
   );
-}
+};
+
+export default App;
