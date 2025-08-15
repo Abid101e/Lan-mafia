@@ -1,12 +1,12 @@
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import HomeScreen from '../Screens/HomeScreen';
+const Stack = createNativeStackNavigator();
 
 const App = () => {
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <HomeScreen />
-    </SafeAreaView>
+    <HomeScreen />
+   
   );
 };
 

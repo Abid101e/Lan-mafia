@@ -1,7 +1,16 @@
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import React from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 
+type RootStackParamList = {
+  HostGame: undefined;
+  // Add other screens here as needed
+};
+
 const HomeScreen = () => {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>LAN Mafia</Text>
