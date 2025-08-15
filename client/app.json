@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "LAN Mafia",
+    "slug": "lan-mafia",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "lanmafia",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1c1c1c"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lanmafia.game"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1c1c1c"
+      },
+      "package": "com.lanmafia.game"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

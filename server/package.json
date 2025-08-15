@@ -1,11 +1,16 @@
 {
   "name": "lan-mafia-server",
   "version": "1.0.0",
-  "description": "LAN Mafia Game Server",
-  "main": "hostServer.js",
+  "description": "LAN Mafia Game Server - Real-time multiplayer Mafia game for local networks",
+  "main": "index.js",
   "scripts": {
-    "start": "node hostServer.js",
-    "dev": "nodemon hostServer.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node -e \"require('./utils/testing').runAllTests()\"",
+    "simulate": "node -e \"require('./utils/testing').simulateGame()\"",
+    "validate": "node -e \"const config = require('./config'); config.initialize(); console.log('✅ Configuration valid')\"",
+    "logs": "tail -f logs/server-$(date +%Y-%m-%d).log 2>/dev/null || echo 'No log file found'",
+    "clean": "rm -rf logs/* 2>/dev/null || echo 'No logs to clean'"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -15,7 +20,27 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["game", "mafia", "socket.io", "multiplayer"],
+  "keywords": [
+    "game",
+    "mafia",
+    "socket.io",
+    "multiplayer",
+    "lan",
+    "real-time",
+    "websocket",
+    "party-game"
+  ],
   "author": "LAN Mafia Team",
-  "license": "MIT"
-} 
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abid101e/Lan-mafia.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Abid101e/Lan-mafia/issues"
+  },
+  "homepage": "https://github.com/Abid101e/Lan-mafia#readme"
+}

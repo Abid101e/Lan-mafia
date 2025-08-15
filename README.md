@@ -1,23 +1,66 @@
-# LAN Mafia 🎭
+# 🎭 LAN Mafia Game
 
-A mobile/web-based offline multiplayer deduction game inspired by Mafia/Werewolf. Play with friends over local WiFi without internet!
+A digital implementation of the classic Mafia party game designed for local area network gameplay. Connect your mobile devices to a host server and enjoy real-time multiplayer social deduction gaming!
 
-## 🌟 Features
+## 🎮 Game Overview
 
-- **Offline Multiplayer**: Connect over local WiFi or hotspot
-- **Role-Based Gameplay**: Killers, Healers, Police, and Civilians
-- **Automated Game Master**: Host device manages all game logic
-- **Private Role Reveal**: Each player sees their role only
-- **Night/Day Cycles**: Strategic night actions and day voting
-- **Cross-Platform**: Works on Android, iOS, and Web
-- **Modern UI**: Dark mafia theme with smooth animations
+LAN Mafia brings the excitement of the traditional Mafia party game to your mobile devices. Players take on secret roles and work to achieve their team's victory through strategy, deception, and social deduction.
 
-## 🎮 How to Play
+### Key Features
 
-### Roles
+- 📱 **Mobile-First Design**: React Native app for iOS and Android
+- 🌐 **Local Network Play**: No internet required - perfect for gatherings
+- ⚡ **Real-Time Gameplay**: WebSocket-powered live interactions
+- 🎯 **Role-Based Abilities**: Killers, Healers, Police, and Townspeople
+- ⚙️ **Customizable Settings**: Host can configure roles, timers, and rules
+- 👑 **Host Controls**: Dedicated host interface for game management
 
-- **🔪 Killers**: Eliminate civilians each night
-- **💊 Healers**: Protect players from death
+## 🏗️ Project Structure
+
+```
+lan-mafia/
+├── client/                     # 📱 React Native (Expo) mobile app
+│   ├── App.js                 # Main app entry point
+│   ├── constants/             # Game constants and role definitions
+│   │   └── roles.js
+│   ├── navigation/            # App navigation setup
+│   │   └── AppNavigator.js
+│   ├── screens/               # Game screen components
+│   │   ├── LobbyScreen.js     # Main lobby and joining
+│   │   ├── HostSettingsScreen.js  # Game configuration
+│   │   ├── RoleRevealScreen.js    # Show assigned roles
+│   │   ├── NightPhaseScreen.js    # Night actions interface
+│   │   ├── DiscussionScreen.js    # Day phase discussion
+│   │   ├── VotingScreen.js        # Voting interface
+│   │   ├── ResultScreen.js        # Round results display
+│   │   └── WinScreen.js           # Game over screen
+│   ├── components/            # Reusable UI components
+│   ├── utils/                 # Client utilities
+│   │   └── socket.js          # WebSocket connection manager
+│   ├── assets/                # Images, sounds, and icons
+│   └── app.json              # Expo configuration
+│
+├── server/                    # 🧠 Node.js game server
+│   ├── index.js              # Express server with Socket.io
+│   ├── socketEvents.js       # WebSocket event handlers
+│   ├── gameLogic.js          # Core game mechanics
+│   ├── state.js              # Game state management
+│   ├── settings.js           # Configuration management
+│   ├── utils/                # Server utilities
+│   │   ├── shuffle.js        # Random array shuffling
+│   │   └── roleBuilder.js    # Role assignment logic
+│   └── package.json          # Server dependencies
+│
+├── docs/                     # 📚 Documentation
+│   ├── PROJECT_OVERVIEW.md   # Detailed project description
+│   ├── GAME_FLOW.md          # Complete game flow documentation
+│   └── UI_MOCKUPS/           # Design mockups and screenshots
+│
+├── .gitignore               # Git ignore rules
+├── README.md                # This file
+└── package.json             # Root package configuration
+```
+
 - **👮 Police**: Investigate players' roles
 - **👤 Civilians**: Vote to eliminate killers
 

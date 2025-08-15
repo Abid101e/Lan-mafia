@@ -1,54 +1,53 @@
-# Project Structure
+lan-mafia/
+├── client/                            # 📱 React Native (Expo) mobile app
+│   ├── App.js
+│   ├── constants/                     # Role lists, phase labels, config defaults
+│   │   └── roles.js
+│   ├── navigation/                   # Stack or tab navigators (optional)
+│   │   └── AppNavigator.js
+│   ├── screens/                       # Each screen in the game flow
+│   │   ├── LobbyScreen.js
+│   │   ├── HostSettingsScreen.js
+│   │   ├── RoleRevealScreen.js
+│   │   ├── NightPhaseScreen.js
+│   │   ├── DiscussionScreen.js
+│   │   ├── VotingScreen.js
+│   │   ├── ResultScreen.js
+│   │   └── WinScreen.js
+│   ├── components/                    # Reusable UI components
+│   │   ├── PlayerCard.js
+│   │   ├── RoleCard.js
+│   │   ├── VoteButton.js
+│   │   └── TimerBar.js
+│   ├── utils/
+│   │   ├── socket.js                  # Connects client to host
+│   │   ├── gamePhases.js              # Phase enums and transitions
+│   │   └── soundPlayer.js             # Handles narrator voice or SFX
+│   ├── assets/                        # 🖼️ Audio + image assets
+│   │   ├── voices/
+│   │   │   ├── killer_wakeup.mp3
+│   │   │   └── vote_now.mp3
+│   │   ├── icons/
+│   │   │   └── role_icons.png
+│   │   └── splash.png
+│   └── app.json                       # Expo config
 
-```
-Lan-mafia/
-├── app/                    # Expo Router app directory
-│   ├── _layout.tsx        # Root layout
-│   ├── index.tsx          # Entry point (splash)
-│   ├── splash.tsx         # Splash screen component
-│   ├── home.tsx           # Home screen (player setup)
-│   ├── host-game.tsx      # Host game screen
-│   ├── join-game.tsx      # Join game screen
-│   └── game.tsx           # Main game screen
-├── assets/                 # Static assets
-│   ├── images/            # App images and logos
-│   └── fonts/             # Custom fonts
-├── server/                # Game server
-│   ├── hostServer.js      # Express + Socket.IO server
-│   ├── package.json       # Server dependencies
-│   └── node_modules/      # Server dependencies
-├── types/                 # TypeScript type definitions
-│   └── game.ts           # Game state and player types
-├── utils/                 # Utility functions
-│   ├── gameLogic.ts      # Game logic helpers
-│   ├── networkUtils.ts   # Network utilities
-│   ├── socketManager.ts  # Socket.IO client manager
-│   └── theme.ts          # App theme configuration
-├── android/              # Android native code
-├── .env.example          # Environment variables template
-├── .gitignore           # Git ignore patterns
-├── app.json             # Expo app configuration
-├── eas.json             # Expo Application Services config
-├── package.json         # Main app dependencies
-├── tsconfig.json        # TypeScript configuration
-├── README.md            # Project documentation
-├── GAME_SUMMARY.md      # Game rules and mechanics
-├── HOTSPOT_SETUP.md     # Network setup guide
-├── INSTALL_ON_PHONES.md # Installation instructions
-└── TROUBLESHOOTING.md   # Common issues and solutions
-```
+├── server/                            # 🧠 Local host logic (runs on host phone/laptop)
+│   ├── index.js                       # Starts socket.io server
+│   ├── socketEvents.js                # All socket event bindings
+│   ├── gameLogic.js                   # Core logic: role assignment, action resolution
+│   ├── state.js                       # Stores players, roles, game progress
+│   ├── settings.js                    # Host-selected role config
+│   ├── utils/
+│   │   ├── shuffle.js                 # Helper to randomize roles
+│   │   └── roleBuilder.js             # Create role list from config
+│   └── README.md
 
-## Key Files
+├── docs/
+│   ├── PROJECT_OVERVIEW.md            # Full game description
+│   ├── GAME_FLOW.md                   # Detailed flow of phases and events
+│   └── UI_MOCKUPS/                    # Optional exported screenshots
 
-- **app/**: Contains all React Native screens using Expo Router
-- **server/**: Node.js server for multiplayer game coordination
-- **utils/**: Shared utilities for networking, game logic, and state management
-- **types/**: TypeScript definitions for type safety
-- **assets/**: Images, fonts, and other static resources
-
-## Scripts
-
-- `npm start`: Start Expo development server
-- `npm run server`: Start game server
-- `npm run android`: Build and run on Android
-- `npm run clean`: Clean and reinstall dependencies
+├── .gitignore
+├── README.md                          # Copilot-friendly root context
+└── package.json (for server)
