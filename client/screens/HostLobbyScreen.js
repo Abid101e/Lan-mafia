@@ -17,6 +17,15 @@ const { width } = Dimensions.get("window");
 export default function HostLobbyScreen({ navigation, route }) {
   const [hostName, setHostName] = useState("");
   const [players, setPlayers] = useState([]);
+
+  // Add debugging to track players state changes
+  useEffect(() => {
+    console.log(
+      "🔄 Players state changed in lobby:",
+      players.length,
+      players.map((p) => p.name)
+    );
+  }, [players]);
   const [gameCode, setGameCode] = useState(route?.params?.gameCode || "");
   const [isConnecting, setIsConnecting] = useState(false);
   const [gameCreated, setGameCreated] = useState(!!route?.params?.gameCode); // If gameCode exists, game is already created
@@ -73,6 +82,7 @@ export default function HostLobbyScreen({ navigation, route }) {
         socket.socket.off("error");
         socket.socket.off("playersResponse");
         socket.socket.off("readyStatusUpdated");
+        socket.socket.off("gameStarted");
       }
     };
   }, [hostName]);
@@ -112,6 +122,7 @@ export default function HostLobbyScreen({ navigation, route }) {
     socket.socket.off("error");
     socket.socket.off("playersResponse");
     socket.socket.off("readyStatusUpdated");
+    socket.socket.off("gameStarted");
 
     // Set up fresh event listeners
     socket.socket.on("gameCreated", (data) => {
@@ -123,8 +134,22 @@ export default function HostLobbyScreen({ navigation, route }) {
     });
 
     socket.socket.on("playersUpdated", (players) => {
-      console.log("Players updated event received:", players);
+      console.log("📥 LOBBY: Players updated event received:", players);
+      console.log("📊 LOBBY: Players count:", players ? players.length : 0);
+      console.log(
+        "📊 LOBBY: Current players state before update:",
+        players.length
+      );
       setPlayers(players);
+      console.log("📊 LOBBY: After setPlayers called");
+
+      // Force a re-render check
+      setTimeout(() => {
+        console.log(
+          "📊 LOBBY: Players state 100ms after setPlayers:",
+          players.length
+        );
+      }, 100);
     });
 
     socket.socket.on("playersResponse", (players) => {
@@ -135,6 +160,11 @@ export default function HostLobbyScreen({ navigation, route }) {
     socket.socket.on("readyStatusUpdated", (data) => {
       console.log("Ready status updated:", data);
       setReadyPlayers(data.readyPlayers);
+    });
+
+    socket.socket.on("gameStarted", (data) => {
+      console.log("🎮 Game started event received:", data);
+      navigation.navigate("RoleReveal");
     });
 
     socket.socket.on("playerJoined", (player) => {
@@ -159,29 +189,56 @@ export default function HostLobbyScreen({ navigation, route }) {
     setIsConnecting(true);
 
     try {
-      // Connect to your machine's IP address (React Native can't use localhost)
-      // Use your WiFi IP for device connections
-      socket.connect("192.168.54.170");
+      // Try multiple IP addresses for connection
+      const possibleIPs = [
+        "192.168.54.91", // PPP connection
+        "10.220.54.130", // Ethernet connection
+        "localhost", // Fallback for simulator
+        "127.0.0.1", // Another localhost fallback
+      ];
 
-      // Wait for connection to be established
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Connection timeout"));
-        }, 5000);
+      let connected = false;
+      let lastError = null;
 
-        const handleConnect = () => {
-          clearTimeout(timeout);
-          console.log("Connected! Now setting up fresh event listeners...");
-          setupSocketListeners();
-          resolve();
-        };
-        socket.socket.on("connect", handleConnect);
+      for (const ip of possibleIPs) {
+        if (connected) break;
 
-        socket.socket.on("connect_error", (error) => {
-          clearTimeout(timeout);
-          reject(error);
-        });
-      });
+        try {
+          console.log(`Attempting to connect to ${ip}...`);
+          socket.connect(ip);
+
+          // Wait for connection to be established with shorter timeout per attempt
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error(`Connection timeout to ${ip}`));
+            }, 3000); // Reduced timeout per IP
+
+            const handleConnect = () => {
+              clearTimeout(timeout);
+              console.log(`Successfully connected to ${ip}!`);
+              setupSocketListeners();
+              connected = true;
+              resolve();
+            };
+
+            const handleError = (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            };
+
+            socket.socket.on("connect", handleConnect);
+            socket.socket.on("connect_error", handleError);
+          });
+        } catch (error) {
+          console.log(`Failed to connect to ${ip}:`, error.message);
+          lastError = error;
+          continue;
+        }
+      }
+
+      if (!connected) {
+        throw lastError || new Error("Could not connect to any server address");
+      }
 
       // Now emit the hostGame event directly on the socket instance
       socket.socket.emit("hostGame", {
@@ -195,7 +252,7 @@ export default function HostLobbyScreen({ navigation, route }) {
       console.error("Failed to create game:", error);
       Alert.alert(
         "Connection Error",
-        "Could not connect to game server. Make sure the server is running."
+        `Could not connect to game server: ${error.message}`
       );
       setIsConnecting(false);
     }

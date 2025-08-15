@@ -33,6 +33,8 @@ export default function NightPhaseScreen({ navigation }) {
   const [pulseAnim] = useState(new Animated.Value(1));
 
   useEffect(() => {
+    console.log("🌙 NightPhase screen mounted, setting up listeners");
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
@@ -41,22 +43,44 @@ export default function NightPhaseScreen({ navigation }) {
 
     startPulseAnimation();
 
-    socket.on("playersUpdated", setPlayers);
-    socket.on("roleAssigned", setPlayerRole);
-    socket.on("timerUpdate", setTimeLeft);
-    socket.on("nightActionResult", handleActionResult);
-    socket.on("gamePhaseChanged", (phase) => {
+    socket.socket.on("playersUpdated", (players) => {
+      console.log("👥 NightPhase: Players updated:", players);
+      setPlayers(players);
+    });
+
+    socket.socket.on("roleAssigned", (role) => {
+      console.log("🎭 NightPhase: Role assigned:", role);
+      setPlayerRole(role);
+    });
+
+    socket.socket.on("timerUpdate", (time) => {
+      console.log("⏰ NightPhase: Timer update:", time);
+      setTimeLeft(time);
+    });
+
+    socket.socket.on("nightActionResult", handleActionResult);
+
+    socket.socket.on("gamePhaseChanged", (phase) => {
+      console.log("🎮 NightPhase: Game phase changed to:", phase);
       if (phase === "discussion") {
         navigation.navigate("Discussion");
       }
     });
 
+    // Request current role and players when component mounts
+    if (socket.socket.connected) {
+      console.log("📤 NightPhase: Requesting current role and players");
+      socket.socket.emit("getCurrentRole");
+      socket.socket.emit("getPlayers");
+    }
+
     return () => {
-      socket.off("playersUpdated");
-      socket.off("roleAssigned");
-      socket.off("timerUpdate");
-      socket.off("nightActionResult");
-      socket.off("gamePhaseChanged");
+      console.log("🧹 NightPhase screen cleanup");
+      socket.socket.off("playersUpdated");
+      socket.socket.off("roleAssigned");
+      socket.socket.off("timerUpdate");
+      socket.socket.off("nightActionResult");
+      socket.socket.off("gamePhaseChanged");
     };
   }, [navigation]);
 
@@ -92,10 +116,16 @@ export default function NightPhaseScreen({ navigation }) {
     const actionType = getActionType();
     if (!actionType) return;
 
-    socket.emit("nightAction", {
+    socket.socket.emit("nightAction", {
       action: actionType,
       target: selectedTarget,
     });
+    console.log(
+      "📤 NightPhase: Action submitted:",
+      actionType,
+      "target:",
+      selectedTarget
+    );
     setActionSubmitted(true);
   };
 

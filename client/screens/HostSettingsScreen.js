@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,70 +7,177 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { socket } from "../utils/socket";
 
 export default function HostSettingsScreen({ navigation }) {
+  console.log("🔄 HostSettingsScreen component rendering...");
+
   const [players, setPlayers] = useState([]);
+
+  // Debug players state changes
+  useEffect(() => {
+    console.log("👥 Players state changed:", players.length, players);
+  }, [players]);
+
   const [gameSettings, setGameSettings] = useState({
-    killers: 2,
-    healers: 1,
-    police: 1,
+    killers: 1, // Default 1
+    healers: 1, // Default 1
+    police: 1, // Default 1
     nightTimer: 45,
     discussionTimer: 120,
     votingTimer: 60,
   });
 
   useEffect(() => {
-    socket.on("playersUpdated", setPlayers);
-    socket.on("gameStarted", () => navigation.navigate("RoleReveal"));
-    socket.on("error", (error) => Alert.alert("Error", error.message));
-    socket.on("settingsUpdated", (data) => {
-      console.log("Settings saved successfully:", data);
-      // Could add a brief success indicator here if needed
+    console.log("🚀 HostSettingsScreen mounted, setting up socket listeners");
+    console.log("🔌 Socket connected:", socket?.socket?.connected);
+    console.log("🆔 Socket ID:", socket?.socket?.id);
+
+    if (!socket?.socket) {
+      console.log("❌ No socket available");
+      return;
+    }
+
+    // Add debugging to see what players data is received
+    const handlePlayersUpdated = (playersData) => {
+      console.log("📥 Received playersUpdated:", playersData);
+      console.log("📊 Players count:", playersData ? playersData.length : 0);
+      console.log("📋 Players details:", JSON.stringify(playersData, null, 2));
+      setPlayers(playersData || []);
+    };
+
+    const handlePlayersResponse = (playersData) => {
+      console.log("📥 Received playersResponse:", playersData);
+      console.log("📊 Players count:", playersData ? playersData.length : 0);
+      console.log("📋 Players details:", JSON.stringify(playersData, null, 2));
+      setPlayers(playersData || []);
+    };
+
+    // Use socket.socket (the actual socket.io instance)
+    socket.socket.on("playersUpdated", handlePlayersUpdated);
+    socket.socket.on("playersResponse", handlePlayersResponse);
+    socket.socket.on("gameStarted", () => navigation.navigate("RoleReveal"));
+    socket.socket.on("error", (error) => Alert.alert("Error", error.message));
+
+    // Add a test listener to see if ANY events are being received
+    socket.socket.on("connect", () => {
+      console.log("🔥 Settings screen detected socket connect event");
     });
 
+    socket.socket.on("disconnect", () => {
+      console.log("🔥 Settings screen detected socket disconnect event");
+    });
+
+    // Also listen for any other events that might be coming through
+    socket.socket.onAny((eventName, ...args) => {
+      console.log(`🔥 Settings screen received event: ${eventName}`, args);
+    });
+
+    // Request current players when component mounts
+    console.log("🔄 Requesting current players...");
+    console.log("🔌 Socket before request:", {
+      connected: socket?.socket?.connected,
+      id: socket?.socket?.id,
+      hasSocket: !!socket?.socket,
+    });
+
+    if (socket?.socket?.connected) {
+      socket.socket.emit("getPlayers", {});
+      console.log("✅ getPlayers request sent");
+
+      // Also request again after a short delay in case the first one doesn't work
+      setTimeout(() => {
+        socket.socket.emit("getPlayers", {});
+        console.log("✅ Second getPlayers request sent");
+      }, 1000);
+    } else {
+      console.log("❌ Socket not connected, cannot send getPlayers request");
+    }
+
+    // Add a timeout to check if we received data
+    setTimeout(() => {
+      console.log("⏰ Timeout check - players length:", players.length);
+    }, 2000);
+
     return () => {
-      socket.off("playersUpdated");
-      socket.off("gameStarted");
-      socket.off("error");
-      socket.off("settingsUpdated");
+      console.log("🧹 HostSettingsScreen cleanup");
+      if (socket?.socket) {
+        socket.socket.off("playersUpdated", handlePlayersUpdated);
+        socket.socket.off("playersResponse", handlePlayersResponse);
+        socket.socket.off("gameStarted");
+        socket.socket.off("error");
+        socket.socket.off("connect");
+        socket.socket.off("disconnect");
+        socket.socket.offAny(); // Remove the catch-all listener
+      }
     };
   }, []);
 
+  // Listen for focus to refresh players data
+  useFocusEffect(
+    useCallback(() => {
+      console.log("👁️ HostSettingsScreen gained focus, requesting players");
+      if (socket?.socket?.connected) {
+        socket.socket.emit("getPlayers", {});
+      }
+    }, [socket])
+  );
+
   const updateSetting = (key, value) => {
-    const newSettings = { ...gameSettings, [key]: value };
-    setGameSettings(newSettings);
-
-    // Auto-save: Send updated settings to server immediately
-    socket.emit("updateGameSettings", {
-      gameCode: "current", // Server should use current game
-      settings: newSettings,
-    });
-
-    console.log(`Updated ${key} to ${value}`, newSettings);
+    setGameSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const calculateTownspeople = () => {
     const { killers, healers, police } = gameSettings;
-    return Math.max(0, players.length - killers - healers - police);
+    const townspeople = Math.max(
+      0,
+      players.length - killers - healers - police
+    );
+    console.log(
+      `🏘️ Calculating townspeople: ${players.length} - ${killers} - ${healers} - ${police} = ${townspeople}`
+    );
+    return townspeople;
+  };
+
+  const getMaxValue = (role) => {
+    const playerCount = players.length || 3; // Fallback to 3 if no players loaded yet
+    console.log(`📊 Getting max for ${role}, playerCount: ${playerCount}`);
+
+    switch (role) {
+      case "killers":
+        return Math.min(4, Math.floor(playerCount / 2)); // Max 4, but not more than half players
+      case "healers":
+      case "police":
+        return Math.max(0, gameSettings.killers - 1); // Always 1 less than killers
+      default:
+        return 1;
+    }
   };
 
   const validateSettings = () => {
     const { killers, healers, police } = gameSettings;
     const totalSpecial = killers + healers + police;
 
-    if (players.length < 4) {
-      Alert.alert("Error", "Need at least 4 players to start");
+    if (players.length < 3) {
+      // Changed from 4 to 3 for testing
+      Alert.alert("Error", "Need at least 3 players to start (testing mode)");
       return false;
     }
 
-    if (totalSpecial >= players.length) {
+    if (totalSpecial > players.length) {
       Alert.alert("Error", "Too many special roles for player count");
       return false;
     }
 
-    if (killers < 1) {
-      Alert.alert("Error", "Need at least 1 killer");
+    // For 3-player testing, allow 0 townspeople
+    if (players.length === 3 && calculateTownspeople() === 0) {
+      console.log("⚠️ 3-player testing mode: allowing 0 townspeople");
+    } else if (calculateTownspeople() < 1) {
+      Alert.alert(
+        "Error",
+        "Invalid role distribution - need at least 1 townsperson (except in 3-player testing)"
+      );
       return false;
     }
 
@@ -78,21 +185,45 @@ export default function HostSettingsScreen({ navigation }) {
   };
 
   const startGame = () => {
+    console.log("🎮 Starting game...");
+    console.log("📊 Current players:", players.length, players);
+    console.log("⚙️ Current gameSettings:", gameSettings);
+
     if (!validateSettings()) return;
 
     const finalSettings = {
-      ...gameSettings,
-      townspeople: calculateTownspeople(),
       totalPlayers: players.length,
+      roles: {
+        killers: gameSettings.killers,
+        healers: gameSettings.healers,
+        police: gameSettings.police,
+        townspeople: calculateTownspeople(),
+      },
+      timers: {
+        nightTimer: gameSettings.nightTimer,
+        discussionTimer: gameSettings.discussionTimer,
+        votingTimer: gameSettings.votingTimer,
+      },
     };
 
-    socket.emit("startGame", finalSettings);
+    console.log(
+      "🚀 Final settings to send:",
+      JSON.stringify(finalSettings, null, 2)
+    );
+
+    if (finalSettings.totalPlayers === 0) {
+      Alert.alert("Error", "No players found. Please refresh and try again.");
+      return;
+    }
+
+    socket.socket.emit("startGame", finalSettings);
   };
 
-  const RoleCounter = ({ title, role, min = 0, max = 5, icon }) => {
+  const RoleCounter = ({ title, role, icon }) => {
     const currentValue = gameSettings[role];
-    const canDecrease = currentValue > min;
-    const canIncrease = currentValue < max;
+    const maxValue = getMaxValue(role);
+    const canDecrease = currentValue > 1; // Minimum is always 1
+    const canIncrease = currentValue < maxValue;
 
     return (
       <View style={styles.roleContainer}>
@@ -102,49 +233,36 @@ export default function HostSettingsScreen({ navigation }) {
           </Text>
           <Text style={styles.roleCount}>{currentValue}</Text>
         </View>
-        <View style={styles.sliderContainer}>
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={[
-              styles.adjustButton,
-              !canDecrease && styles.disabledAdjustButton,
-            ]}
-            onPress={() => {
-              if (canDecrease) {
-                updateSetting(role, currentValue - 1);
-              }
-            }}
+            style={[styles.button, !canDecrease && styles.buttonDisabled]}
+            onPress={() => canDecrease && updateSetting(role, currentValue - 1)}
             disabled={!canDecrease}
-            activeOpacity={0.7}
           >
             <Text
               style={[
-                styles.adjustButtonText,
-                !canDecrease && styles.disabledButtonText,
+                styles.buttonText,
+                !canDecrease && styles.buttonTextDisabled,
               ]}
             >
               -
             </Text>
           </TouchableOpacity>
-          <View style={styles.slider}>
-            <Text style={styles.sliderValue}>{currentValue}</Text>
+
+          <View style={styles.valueDisplay}>
+            <Text style={styles.valueText}>{currentValue}</Text>
+            <Text style={styles.maxText}>Max: {maxValue}</Text>
           </View>
+
           <TouchableOpacity
-            style={[
-              styles.adjustButton,
-              !canIncrease && styles.disabledAdjustButton,
-            ]}
-            onPress={() => {
-              if (canIncrease) {
-                updateSetting(role, currentValue + 1);
-              }
-            }}
+            style={[styles.button, !canIncrease && styles.buttonDisabled]}
+            onPress={() => canIncrease && updateSetting(role, currentValue + 1)}
             disabled={!canIncrease}
-            activeOpacity={0.7}
           >
             <Text
               style={[
-                styles.adjustButtonText,
-                !canIncrease && styles.disabledButtonText,
+                styles.buttonText,
+                !canIncrease && styles.buttonTextDisabled,
               ]}
             >
               +
@@ -155,10 +273,12 @@ export default function HostSettingsScreen({ navigation }) {
     );
   };
 
-  const TimerSetting = ({ title, setting, min = 15, max = 300, icon }) => {
+  const TimerSetting = ({ title, setting, icon }) => {
     const currentValue = gameSettings[setting];
-    const canDecrease = currentValue > min;
-    const canIncrease = currentValue < max;
+    const minValue =
+      setting === "nightTimer" ? 30 : setting === "discussionTimer" ? 60 : 30;
+    const maxValue = setting === "discussionTimer" ? 300 : 120;
+    const step = 15;
 
     return (
       <View style={styles.timerContainer}>
@@ -166,57 +286,41 @@ export default function HostSettingsScreen({ navigation }) {
           <Text style={styles.timerTitle}>
             {icon} {title}
           </Text>
-          <Text style={styles.timerValue}>{currentValue}s</Text>
+          <Text style={styles.timerValue}>
+            {Math.floor(currentValue / 60)}m {currentValue % 60}s
+          </Text>
         </View>
-        <View style={styles.sliderContainer}>
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[
-              styles.adjustButton,
-              !canDecrease && styles.disabledAdjustButton,
+              styles.button,
+              currentValue <= minValue && styles.buttonDisabled,
             ]}
-            onPress={() => {
-              if (canDecrease) {
-                updateSetting(setting, currentValue - 15);
-              }
-            }}
-            disabled={!canDecrease}
-            activeOpacity={0.7}
+            onPress={() =>
+              currentValue > minValue &&
+              updateSetting(setting, currentValue - step)
+            }
+            disabled={currentValue <= minValue}
           >
-            <Text
-              style={[
-                styles.adjustButtonText,
-                !canDecrease && styles.disabledButtonText,
-              ]}
-            >
-              -
-            </Text>
+            <Text style={styles.buttonText}>-</Text>
           </TouchableOpacity>
-          <View style={styles.slider}>
-            <Text style={styles.sliderValue}>
-              {Math.floor(currentValue / 60)}m {currentValue % 60}s
-            </Text>
+
+          <View style={styles.valueDisplay}>
+            <Text style={styles.valueText}>{currentValue}s</Text>
           </View>
+
           <TouchableOpacity
             style={[
-              styles.adjustButton,
-              !canIncrease && styles.disabledAdjustButton,
+              styles.button,
+              currentValue >= maxValue && styles.buttonDisabled,
             ]}
-            onPress={() => {
-              if (canIncrease) {
-                updateSetting(setting, currentValue + 15);
-              }
-            }}
-            disabled={!canIncrease}
-            activeOpacity={0.7}
+            onPress={() =>
+              currentValue < maxValue &&
+              updateSetting(setting, currentValue + step)
+            }
+            disabled={currentValue >= maxValue}
           >
-            <Text
-              style={[
-                styles.adjustButtonText,
-                !canIncrease && styles.disabledButtonText,
-              ]}
-            >
-              +
-            </Text>
+            <Text style={styles.buttonText}>+</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -225,7 +329,17 @@ export default function HostSettingsScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>🎮 Game Configuration</Text>
+      <Text style={styles.title}>🎮 Game Settings</Text>
+
+      {/* Debug info */}
+      <View style={[styles.playersInfo, { backgroundColor: "#ff4444" }]}>
+        <Text style={styles.playersCount}>
+          🔍 DEBUG: Players array length: {players.length}
+        </Text>
+        <Text style={styles.playersCount}>
+          🔍 Players data: {JSON.stringify(players.map((p) => p.name))}
+        </Text>
+      </View>
 
       <View style={styles.playersInfo}>
         <Text style={styles.playersCount}>👥 Players: {players.length}</Text>
@@ -236,79 +350,44 @@ export default function HostSettingsScreen({ navigation }) {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🎭 Roles</Text>
+        <Text style={styles.sectionSubtitle}>
+          Killers can be up to 4, others max {gameSettings.killers - 1}
+        </Text>
 
-        <RoleCounter
-          title="Killers"
-          role="killers"
-          min={1}
-          max={Math.max(1, Math.floor(players.length / 2))}
-          icon="🔪"
-        />
-
-        <RoleCounter
-          title="Healers"
-          role="healers"
-          min={0}
-          max={Math.min(3, Math.floor(players.length / 3))}
-          icon="💊"
-        />
-
-        <RoleCounter
-          title="Police"
-          role="police"
-          min={0}
-          max={Math.min(2, Math.floor(players.length / 4))}
-          icon="👮"
-        />
+        <RoleCounter title="Killers" role="killers" icon="🔪" />
+        <RoleCounter title="Healers" role="healers" icon="💊" />
+        <RoleCounter title="Police" role="police" icon="👮" />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>⏱️ Phase Timers</Text>
 
-        <TimerSetting
-          title="Night Phase"
-          setting="nightTimer"
-          min={30}
-          max={120}
-          icon="🌙"
-        />
-
-        <TimerSetting
-          title="Discussion"
-          setting="discussionTimer"
-          min={60}
-          max={300}
-          icon="💬"
-        />
-
-        <TimerSetting
-          title="Voting"
-          setting="votingTimer"
-          min={30}
-          max={120}
-          icon="🗳️"
-        />
+        <TimerSetting title="Night Phase" setting="nightTimer" icon="🌙" />
+        <TimerSetting title="Discussion" setting="discussionTimer" icon="💬" />
+        <TimerSetting title="Voting" setting="votingTimer" icon="🗳️" />
       </View>
 
       <View style={styles.summary}>
         <Text style={styles.summaryTitle}>📋 Game Summary</Text>
         <Text style={styles.summaryText}>
           {players.length} players: {gameSettings.killers} killers,{" "}
-          {gameSettings.healers} healers,
-          {gameSettings.police} police, {calculateTownspeople()} townspeople
+          {gameSettings.healers} healers, {gameSettings.police} police,{" "}
+          {calculateTownspeople()} townspeople
         </Text>
       </View>
 
       <TouchableOpacity
         style={[
           styles.startButton,
-          players.length < 4 && styles.disabledButton,
+          players.length < 3 && styles.buttonDisabled, // Changed from 4 to 3
         ]}
         onPress={startGame}
-        disabled={players.length < 4}
+        disabled={players.length < 3} // Changed from 4 to 3
       >
         <Text style={styles.startButtonText}>
-          {players.length < 4 ? "Need More Players" : "🚀 Start Game"}
+          {players.length < 3
+            ? "Need More Players (Testing: Min 3)"
+            : "🚀 Start Game"}
         </Text>
       </TouchableOpacity>
 
@@ -363,6 +442,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
   },
+  sectionSubtitle: {
+    color: "#999",
+    fontSize: 14,
+    marginBottom: 15,
+  },
   roleContainer: {
     backgroundColor: "#2a2a2a",
     padding: 15,
@@ -385,43 +469,43 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
-  sliderContainer: {
+  buttonContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
   },
-  adjustButton: {
+  button: {
     backgroundColor: "#444",
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 5,
-    borderWidth: 2,
-    borderColor: "#666",
   },
-  disabledAdjustButton: {
-    backgroundColor: "#1a1a1a",
-    borderColor: "#333",
+  buttonDisabled: {
+    backgroundColor: "#222",
     opacity: 0.5,
   },
-  adjustButtonText: {
+  buttonText: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
   },
-  disabledButtonText: {
+  buttonTextDisabled: {
     color: "#666",
   },
-  slider: {
-    flex: 1,
+  valueDisplay: {
     alignItems: "center",
-    marginHorizontal: 20,
+    flex: 1,
   },
-  sliderValue: {
-    color: "#ccc",
-    fontSize: 14,
+  valueText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  maxText: {
+    color: "#999",
+    fontSize: 12,
   },
   timerContainer: {
     backgroundColor: "#2a2a2a",
@@ -467,9 +551,6 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 10,
     marginBottom: 15,
-  },
-  disabledButton: {
-    backgroundColor: "#666",
   },
   startButtonText: {
     color: "#000",

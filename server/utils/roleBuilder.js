@@ -82,16 +82,33 @@ function validateRoleDistribution(settings) {
     };
   }
 
-  if (townspeople < 1) {
+  if (townspeople < 0) {
     return {
       valid: false,
-      message: "Must have at least 1 townsperson",
+      message: "Townspeople count cannot be negative",
     };
   }
 
-  // Check balance (killers shouldn't outnumber townspeople)
+  // Special case for 3-player testing: allow 0 townspeople
+  if (totalPlayers === 3 && townspeople === 0) {
+    console.log(
+      "⚠️ RoleBuilder: 3-player testing mode, allowing 0 townspeople"
+    );
+  } else if (townspeople < 1) {
+    return {
+      valid: false,
+      message:
+        "Must have at least 1 townsperson (except in 3-player testing mode)",
+    };
+  }
+
+  // Check balance (killers shouldn't outnumber townspeople) - except for 3-player testing
   const townTotal = healers + police + townspeople;
-  if (killers >= townTotal) {
+  if (totalPlayers === 3 && townspeople === 0) {
+    console.log(
+      "⚠️ RoleBuilder: Skipping balance check for 3-player testing mode"
+    );
+  } else if (killers >= townTotal) {
     return {
       valid: false,
       message: "Too many killers - game would be unbalanced",

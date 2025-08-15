@@ -26,6 +26,7 @@ export default function JoinGameScreen({ navigation }) {
 
     // Set up socket listeners
     socket.on("gameListUpdated", (games) => {
+      console.log("Received games list:", games);
       setAvailableGames(games);
       setIsScanning(false);
       setIsRefreshing(false);

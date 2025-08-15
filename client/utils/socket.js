@@ -45,11 +45,15 @@ class SocketManager {
 
       // Create new socket connection
       this.socket = io(serverURL, {
-        timeout: 5000,
+        timeout: 10000, // Increased timeout
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 3, // Reduced attempts for faster failover
         reconnectionDelay: 1000,
+        forceNew: true, // Force new connection
+        transports: ["websocket", "polling"], // Allow fallback to polling
       });
+
+      console.log(`Attempting to connect to: ${serverURL}`);
 
       // Set up connection event handlers
       this.setupEventHandlers();
@@ -69,21 +73,26 @@ class SocketManager {
 
     this.socket.on("connect", () => {
       this.isConnected = true;
-      console.log("Connected to host server");
+      console.log(`✅ Successfully connected to host server: ${this.hostIP}`);
     });
 
-    this.socket.on("disconnect", () => {
+    this.socket.on("disconnect", (reason) => {
       this.isConnected = false;
-      console.log("Disconnected from host server");
+      console.log(`❌ Disconnected from host server. Reason: ${reason}`);
     });
 
     this.socket.on("connect_error", (error) => {
-      console.error("Connection error:", error);
+      console.error(
+        `❌ Connection error to ${this.hostIP}:`,
+        error.message || error
+      );
       this.isConnected = false;
     });
 
     this.socket.on("reconnect", (attemptNumber) => {
-      console.log(`Reconnected after ${attemptNumber} attempts`);
+      console.log(
+        `🔄 Reconnected to ${this.hostIP} after ${attemptNumber} attempts`
+      );
       this.isConnected = true;
     });
 
@@ -97,15 +106,20 @@ class SocketManager {
    */
   scanForGames() {
     if (this.socket && this.isConnected) {
+      console.log("Scanning for games on connected socket...");
       this.socket.emit("scanForGames");
     } else {
       // If not connected, try connecting to your machine's IP first
-      this.connect("192.168.54.170");
+      console.log("Not connected, attempting to connect first...");
+      this.connect("10.220.54.130"); // Use correct IP
       setTimeout(() => {
         if (this.socket && this.isConnected) {
+          console.log("Connected, now scanning for games...");
           this.socket.emit("scanForGames");
+        } else {
+          console.log("Failed to connect for game scanning");
         }
-      }, 1000);
+      }, 2000); // Increased timeout
     }
   }
 

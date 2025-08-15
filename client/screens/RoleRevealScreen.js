@@ -21,7 +21,10 @@ export default function RoleRevealScreen({ navigation }) {
   const [slideAnim] = useState(new Animated.Value(height));
 
   useEffect(() => {
-    socket.on("roleAssigned", (role) => {
+    console.log("🎭 RoleReveal screen mounted, setting up listeners");
+
+    socket.socket.on("roleAssigned", (role) => {
+      console.log("🎭 Role assigned:", role);
       setPlayerRole(role);
       Animated.sequence([
         Animated.timing(fadeAnim, {
@@ -38,21 +41,25 @@ export default function RoleRevealScreen({ navigation }) {
       ]).start();
     });
 
-    socket.on("gamePhaseChanged", (phase) => {
+    socket.socket.on("gamePhaseChanged", (phase) => {
+      console.log("🎮 Game phase changed to:", phase);
       if (phase === "night") {
+        console.log("🌙 Navigating to NightPhase");
         navigation.navigate("NightPhase");
       }
     });
 
     return () => {
-      socket.off("roleAssigned");
-      socket.off("gamePhaseChanged");
+      console.log("🧹 RoleReveal screen cleanup");
+      socket.socket.off("roleAssigned");
+      socket.socket.off("gamePhaseChanged");
     };
   }, [navigation]);
 
   const handleReady = () => {
     setIsReady(true);
-    socket.emit("playerReady");
+    socket.socket.emit("playerReady");
+    console.log("📤 Player ready event sent");
   };
 
   if (!playerRole) {

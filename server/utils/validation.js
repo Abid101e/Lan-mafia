@@ -88,81 +88,159 @@ function validatePlayerName(name) {
  * @returns {Object} Validation result
  */
 function validateGameSettings(settings) {
+  console.log("🔍 Starting validation...");
+  console.log("📥 Received settings:", JSON.stringify(settings, null, 2));
+  console.log("📊 Settings type:", typeof settings);
+  console.log("📋 Settings keys:", Object.keys(settings || {}));
+
   if (!settings || typeof settings !== "object") {
+    console.log("❌ Settings validation failed: not an object");
     return {
       valid: false,
       message: "Invalid settings format",
     };
   }
 
-  // Validate total players
-  if (settings.totalPlayers !== undefined) {
+  // Handle both flat and nested formats
+  let roles, timers, totalPlayers;
+
+  if (settings.roles) {
+    console.log("🎭 Using nested format");
+    // Nested format
+    roles = settings.roles;
+    timers = settings.timers || {};
+    totalPlayers = settings.totalPlayers;
+  } else {
+    console.log("📄 Using flat format (legacy)");
+    // Flat format (legacy)
+    roles = {
+      killers: settings.killers,
+      healers: settings.healers,
+      police: settings.police,
+      townspeople: settings.townspeople,
+    };
+    timers = {
+      nightTimer: settings.nightTimer,
+      discussionTimer: settings.discussionTimer,
+      votingTimer: settings.votingTimer,
+    };
+    totalPlayers = settings.totalPlayers;
+  }
+
+  console.log("🎭 Extracted roles:", JSON.stringify(roles, null, 2));
+  console.log("⏱️ Extracted timers:", JSON.stringify(timers, null, 2));
+  console.log("👥 Total players:", totalPlayers);
+
+  // Check if roles object exists and has properties
+  if (!roles || typeof roles !== "object") {
+    console.log("❌ Roles validation failed: roles not found or not an object");
+    return {
+      valid: false,
+      message: "Invalid settings format - roles missing",
+    };
+  }
+
+  // Validate total players (allowing 3 for testing)
+  if (totalPlayers !== undefined) {
+    console.log("🔢 Validating total players:", totalPlayers);
     if (
-      !Number.isInteger(settings.totalPlayers) ||
-      settings.totalPlayers < 4 ||
-      settings.totalPlayers > 20
+      !Number.isInteger(totalPlayers) ||
+      totalPlayers < 3 || // Changed from 4 to 3 for testing
+      totalPlayers > 20
     ) {
+      console.log("❌ Total players validation failed");
       return {
         valid: false,
-        message: "Total players must be between 4 and 20",
+        message: "Total players must be between 3 and 20 (testing mode)",
       };
     }
   }
 
   // Validate roles
-  if (settings.roles) {
-    const { killers, healers, police, townspeople } = settings.roles;
+  const { killers, healers, police, townspeople } = roles;
+  console.log(
+    "🔍 Individual roles - killers:",
+    killers,
+    "healers:",
+    healers,
+    "police:",
+    police,
+    "townspeople:",
+    townspeople
+  );
 
-    if (
-      killers !== undefined &&
-      (!Number.isInteger(killers) || killers < 1 || killers > 5)
-    ) {
-      return {
-        valid: false,
-        message: "Killers must be between 1 and 5",
-      };
-    }
-
-    if (
-      healers !== undefined &&
-      (!Number.isInteger(healers) || healers < 0 || healers > 3)
-    ) {
-      return {
-        valid: false,
-        message: "Healers must be between 0 and 3",
-      };
-    }
-
-    if (
-      police !== undefined &&
-      (!Number.isInteger(police) || police < 0 || police > 2)
-    ) {
-      return {
-        valid: false,
-        message: "Police must be between 0 and 2",
-      };
-    }
-
-    if (
-      townspeople !== undefined &&
-      (!Number.isInteger(townspeople) || townspeople < 1)
-    ) {
-      return {
-        valid: false,
-        message: "Must have at least 1 townsperson",
-      };
-    }
+  if (
+    killers !== undefined &&
+    (!Number.isInteger(killers) || killers < 1 || killers > 5)
+  ) {
+    console.log("❌ Killers validation failed:", killers);
+    return {
+      valid: false,
+      message: "Killers must be between 1 and 5",
+    };
   }
 
-  // Validate timers
-  if (settings.timers) {
+  if (
+    healers !== undefined &&
+    (!Number.isInteger(healers) || healers < 0 || healers > 3)
+  ) {
+    console.log("❌ Healers validation failed:", healers);
+    return {
+      valid: false,
+      message: "Healers must be between 0 and 3",
+    };
+  }
+
+  if (
+    police !== undefined &&
+    (!Number.isInteger(police) || police < 0 || police > 2)
+  ) {
+    console.log("❌ Police validation failed:", police);
+    return {
+      valid: false,
+      message: "Police must be between 0 and 2",
+    };
+  }
+
+  if (
+    townspeople !== undefined &&
+    (!Number.isInteger(townspeople) || townspeople < 0)
+  ) {
+    console.log("❌ Townspeople validation failed:", townspeople);
+    return {
+      valid: false,
+      message: "Townspeople count must be 0 or greater (testing mode allows 0)",
+    };
+  }
+
+  // Special case for 3-player testing: allow 0 townspeople
+  if (totalPlayers === 3 && townspeople === 0) {
+    console.log("⚠️ 3-player testing mode: allowing 0 townspeople");
+  } else if (townspeople !== undefined && townspeople < 1) {
+    console.log(
+      "❌ Townspeople validation failed for normal game:",
+      townspeople
+    );
+    return {
+      valid: false,
+      message:
+        "Must have at least 1 townsperson (except in 3-player testing mode)",
+    };
+  }
+
+  console.log("✅ Roles validation passed");
+
+  // Validate timers if they exist
+  if (timers && typeof timers === "object") {
+    console.log("⏱️ Validating timers...");
     const { nightTimer, discussionTimer, votingTimer, roleRevealTimer } =
-      settings.timers;
+      timers;
 
     if (
       nightTimer !== undefined &&
       (!Number.isInteger(nightTimer) || nightTimer < 15 || nightTimer > 300)
     ) {
+      console.log("❌ Night timer validation failed:", nightTimer);
       return {
         valid: false,
         message: "Night timer must be between 15 and 300 seconds",
@@ -175,6 +253,7 @@ function validateGameSettings(settings) {
         discussionTimer < 30 ||
         discussionTimer > 600)
     ) {
+      console.log("❌ Discussion timer validation failed:", discussionTimer);
       return {
         valid: false,
         message: "Discussion timer must be between 30 and 600 seconds",
@@ -185,81 +264,63 @@ function validateGameSettings(settings) {
       votingTimer !== undefined &&
       (!Number.isInteger(votingTimer) || votingTimer < 15 || votingTimer > 300)
     ) {
+      console.log("❌ Voting timer validation failed:", votingTimer);
       return {
         valid: false,
         message: "Voting timer must be between 15 and 300 seconds",
       };
     }
 
-    if (
-      roleRevealTimer !== undefined &&
-      (!Number.isInteger(roleRevealTimer) ||
-        roleRevealTimer < 5 ||
-        roleRevealTimer > 60)
-    ) {
-      return {
-        valid: false,
-        message: "Role reveal timer must be between 5 and 60 seconds",
-      };
-    }
+    console.log("✅ Timers validation passed");
   }
 
-  return { valid: true };
+  console.log("✅ All validation passed successfully!");
+  return {
+    valid: true,
+    message: "Game settings are valid",
+  };
 }
 
 /**
- * Validate socket data
- * @param {*} data - Data to validate
- * @param {string} expectedType - Expected data type
+ * Validate room code format
+ * @param {string} roomCode - Room code to validate
  * @returns {Object} Validation result
  */
-function validateSocketData(data, expectedType) {
-  if (data === null || data === undefined) {
+function validateRoomCode(roomCode) {
+  if (!roomCode || typeof roomCode !== "string") {
     return {
       valid: false,
-      message: "Data is required",
+      message: "Room code is required",
     };
   }
 
-  if (expectedType === "object" && typeof data !== "object") {
+  const trimmedCode = roomCode.trim().toUpperCase();
+
+  if (trimmedCode.length !== 6) {
     return {
       valid: false,
-      message: "Expected object data",
+      message: "Room code must be exactly 6 characters",
     };
   }
 
-  if (expectedType === "string" && typeof data !== "string") {
+  if (!/^[A-Z0-9]+$/.test(trimmedCode)) {
     return {
       valid: false,
-      message: "Expected string data",
+      message: "Room code must contain only letters and numbers",
     };
   }
 
-  if (expectedType === "number" && typeof data !== "number") {
-    return {
-      valid: false,
-      message: "Expected number data",
-    };
-  }
-
-  return { valid: true };
+  return {
+    valid: true,
+    sanitizedCode: trimmedCode,
+  };
 }
 
-/**
- * Sanitize user input
- * @param {string} input - Input to sanitize
- * @returns {string} Sanitized input
- */
-function sanitizeInput(input) {
-  if (typeof input !== "string") {
-    return "";
-  }
-
-  return input
-    .trim()
-    .replace(/[<>]/g, "") // Remove potential HTML tags
-    .substring(0, 500); // Limit length
-}
+module.exports = {
+  validatePlayerName,
+  validateGameSettings,
+  validateRoomCode,
+};
 
 /**
  * Validate player action
@@ -305,7 +366,5 @@ function validatePlayerAction(action, playerId, targetId = null) {
 module.exports = {
   validatePlayerName,
   validateGameSettings,
-  validateSocketData,
-  sanitizeInput,
-  validatePlayerAction,
+  validateRoomCode,
 };

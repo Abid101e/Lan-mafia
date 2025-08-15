@@ -154,6 +154,35 @@ function setupSocketEvents(io) {
       }
     });
 
+    // Get current players list
+    socket.on("getPlayers", (data) => {
+      try {
+        console.log("getPlayers request received:", data);
+        const players = gameState.getPlayers();
+        console.log("Sending players response:", players);
+        console.log("Broadcasting to all clients...");
+        io.emit("playersUpdated", players); // Broadcast to all clients instead of just this socket
+      } catch (error) {
+        handleSocketError(socket, error, "getPlayers");
+      }
+    });
+
+    // Get current player's role
+    socket.on("getCurrentRole", () => {
+      try {
+        console.log("getCurrentRole request received from socket:", socket.id);
+        const player = gameState.getPlayerBySocketId(socket.id);
+        if (player && player.role) {
+          console.log(`Sending role ${player.role} to player ${player.name}`);
+          socket.emit("roleAssigned", player.role);
+        } else {
+          console.log("Player not found or no role assigned yet");
+        }
+      } catch (error) {
+        handleSocketError(socket, error, "getCurrentRole");
+      }
+    });
+
     // Update game settings (auto-save from host)
     socket.on("updateGameSettings", (data) => {
       try {
@@ -186,9 +215,20 @@ function setupSocketEvents(io) {
           throw createPermissionError(socket.id, "start the game");
         }
 
+        console.log(
+          "Received game settings:",
+          JSON.stringify(gameSettings, null, 2)
+        );
+
         // Validate game settings
         const settingsValidation = validateGameSettings(gameSettings);
+        console.log("Settings validation result:", settingsValidation);
+
         if (!settingsValidation.valid) {
+          console.log(
+            "Settings validation failed:",
+            settingsValidation.message
+          );
           throw createValidationError(settingsValidation, "startGame");
         }
 
