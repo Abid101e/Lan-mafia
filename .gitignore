@@ -31,9 +31,36 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Logs
+logs
+*.log
+
+# Build files
+build/
+dist/
+
+# Test files
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
 
 app-example

@@ -1,13 +1,18 @@
-import React from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import HomeScreen from '../Screens/HomeScreen';
+import { router } from "expo-router";
+import React, { useEffect, useState } from "react";
+import SplashScreen from "./splash";
 
-const App = () => {
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <HomeScreen />
-    </SafeAreaView>
-  );
-};
+export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
 
-export default App;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+      router.replace("/home");
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  return showSplash ? <SplashScreen /> : null;
+}

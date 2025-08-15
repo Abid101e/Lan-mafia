@@ -1,0 +1,21 @@
+{
+  "name": "lan-mafia-server",
+  "version": "1.0.0",
+  "description": "LAN Mafia Game Server",
+  "main": "hostServer.js",
+  "scripts": {
+    "start": "node hostServer.js",
+    "dev": "nodemon hostServer.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["game", "mafia", "socket.io", "multiplayer"],
+  "author": "LAN Mafia Team",
+  "license": "MIT"
+} 
