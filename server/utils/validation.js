@@ -316,12 +316,6 @@ function validateRoomCode(roomCode) {
   };
 }
 
-module.exports = {
-  validatePlayerName,
-  validateGameSettings,
-  validateRoomCode,
-};
-
 /**
  * Validate player action
  * @param {string} action - Action type
@@ -367,4 +361,5 @@ module.exports = {
   validatePlayerName,
   validateGameSettings,
   validateRoomCode,
+  validatePlayerAction,
 };

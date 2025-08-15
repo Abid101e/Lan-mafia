@@ -32,6 +32,7 @@ const RoleCard = ({
           "Win when killers equal or outnumber town",
         ],
         icon: "🔪",
+        image: require("../assets/mafia.jpg"),
         team: "Mafia",
       },
       healer: {
@@ -44,6 +45,7 @@ const RoleCard = ({
           "Cannot heal the same person twice in a row",
         ],
         icon: "💊",
+        image: require("../assets/healer.jpg"),
         team: "Town",
       },
       police: {
@@ -56,6 +58,7 @@ const RoleCard = ({
           "Learn if they are suspicious or innocent",
         ],
         icon: "🔍",
+        image: require("../assets/police.jpg"),
         team: "Town",
       },
       townsperson: {
@@ -97,6 +100,9 @@ const RoleCard = ({
       ]}
     >
       <View style={styles.header}>
+        {roleData.image && (
+          <Image source={roleData.image} style={styles.roleImage} />
+        )}
         <Text style={styles.icon}>{roleData.icon}</Text>
         <View style={styles.titleContainer}>
           <Text style={[styles.roleName, { color: roleData.color }]}>
@@ -156,6 +162,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 15,
+  },
+  roleImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 15,
+    borderWidth: 2,
+    borderColor: "#ffffff",
   },
   icon: {
     fontSize: 40,

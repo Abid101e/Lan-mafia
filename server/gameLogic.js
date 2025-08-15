@@ -13,7 +13,6 @@
  * - checkWinCondition(players): returns 'civilians', 'killers', or null
  */
 
-
 const { shuffle } = require("./utils/shuffle");
 const { buildRoleList } = require("./utils/roleBuilder");
 
@@ -86,14 +85,17 @@ function processNightActions(actions, players) {
   // Process investigations
   investigations.forEach((investigation) => {
     const targetPlayer = players.find((p) => p.id === investigation.target);
-    if (targetPlayer) {
-      const investigatorSocket = players.find(
-        (p) => p.id === investigation.playerId
-      );
+    const investigatorPlayer = players.find(
+      (p) => p.id === investigation.playerId
+    );
+    if (targetPlayer && investigatorPlayer) {
       results.investigations.push({
         investigator: investigation.playerId,
+        investigatorName: investigatorPlayer.name,
         target: investigation.target,
+        targetName: targetPlayer.name,
         result: targetPlayer.role === "killer" ? "suspicious" : "innocent",
+        publicMessage: `${investigatorPlayer.name} investigated someone during the night.`,
       });
     }
   });
@@ -107,7 +109,16 @@ function processNightActions(actions, players) {
       deadPlayerNames.length === 1 ? "was" : "were"
     } eliminated during the night.`;
   } else {
-    results.message = "No one was eliminated during the night.";
+    // Check if there were kills but they were healed
+    const wasKillAttempted = kills.length > 0;
+    const wasHealed = heals.length > 0;
+
+    if (wasKillAttempted && wasHealed) {
+      results.message =
+        "No one was eliminated during the night. The healer saved someone!";
+    } else {
+      results.message = "No one was eliminated during the night.";
+    }
   }
 
   console.log("🌙 Night results:", results);
@@ -172,6 +183,24 @@ function checkWinCondition(players) {
   const aliveKillers = alivePlayers.filter((p) => p.role === "killer");
   const aliveTownspeople = alivePlayers.filter((p) => p.role !== "killer");
 
+  console.log("🔍 Win condition debug:");
+  console.log(
+    "All players:",
+    players.map((p) => ({ name: p.name, role: p.role, isAlive: p.isAlive }))
+  );
+  console.log(
+    "Alive players:",
+    alivePlayers.map((p) => ({ name: p.name, role: p.role }))
+  );
+  console.log(
+    "Alive killers:",
+    aliveKillers.map((p) => ({ name: p.name, role: p.role }))
+  );
+  console.log(
+    "Alive townspeople:",
+    aliveTownspeople.map((p) => ({ name: p.name, role: p.role }))
+  );
+
   console.log(
     `🏆 Win check: ${aliveKillers.length} killers, ${aliveTownspeople.length} townspeople`
   );
@@ -216,7 +245,24 @@ function areAllNightActionsComplete(players, actions) {
 
   const submittedActions = new Set(actions.map((a) => a.playerId));
 
-  return playersWithActions.every((p) => submittedActions.has(p.id));
+  console.log("🌙 Night action completion check:");
+  console.log(
+    "Alive players:",
+    alivePlayers.map((p) => ({ name: p.name, role: p.role }))
+  );
+  console.log(
+    "Players with actions:",
+    playersWithActions.map((p) => ({ name: p.name, role: p.role }))
+  );
+  console.log("Submitted actions:", actions);
+  console.log("Submitted player IDs:", Array.from(submittedActions));
+
+  const allComplete = playersWithActions.every((p) =>
+    submittedActions.has(p.id)
+  );
+  console.log("All actions complete?", allComplete);
+
+  return allComplete;
 }
 
 /**

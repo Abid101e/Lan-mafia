@@ -23,16 +23,36 @@ export default function VotingScreen({ navigation }) {
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
+    console.log("🗳️ Voting screen mounted, setting up listeners");
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
       useNativeDriver: true,
     }).start();
 
-    socket.on("playersUpdated", setPlayers);
-    socket.on("timerUpdate", setTimeLeft);
-    socket.on("voteCounts", setVoteCounts);
-    socket.on("gamePhaseChanged", (phase) => {
+    socket.socket.on("playersUpdated", (players) => {
+      console.log("👥 Voting: Players updated:", players);
+      console.log("👥 Voting: Players count and alive status:", {
+        total: players.length,
+        alive: players.filter((p) => p.isAlive).length,
+        dead: players.filter((p) => !p.isAlive).length,
+      });
+      setPlayers(players);
+    });
+
+    socket.socket.on("timerUpdate", (time) => {
+      console.log("⏰ Voting: Timer update:", time);
+      setTimeLeft(time);
+    });
+
+    socket.socket.on("voteCounts", (counts) => {
+      console.log("📊 Voting: Vote counts updated:", counts);
+      setVoteCounts(counts);
+    });
+
+    socket.socket.on("gamePhaseChanged", (phase) => {
+      console.log("🎮 Voting: Game phase changed to:", phase);
       if (phase === "results") {
         navigation.navigate("Result");
       } else if (phase === "game_over") {
@@ -40,29 +60,65 @@ export default function VotingScreen({ navigation }) {
       }
     });
 
+    socket.socket.on("gameOver", (result) => {
+      console.log("🏁 Voting: Game over received:", result);
+      navigation.navigate("Win");
+    });
+
+    // Request current players when component mounts
+    if (socket.socket.connected) {
+      console.log("📤 Voting: Requesting current players");
+      socket.socket.emit("getPlayers");
+    } else {
+      console.log("❌ Socket not connected, cannot request players");
+    }
+
     return () => {
-      socket.off("playersUpdated");
-      socket.off("timerUpdate");
-      socket.off("voteCounts");
-      socket.off("gamePhaseChanged");
+      console.log("🧹 Voting screen cleanup");
+      socket.socket.off("playersUpdated");
+      socket.socket.off("timerUpdate");
+      socket.socket.off("voteCounts");
+      socket.socket.off("gamePhaseChanged");
+      socket.socket.off("gameOver");
     };
   }, [navigation]);
 
-  const alivePlayers = players.filter((p) => p.isAlive && !p.isCurrentPlayer);
+  const alivePlayers = players.filter(
+    (p) => p.isAlive && p.socketId !== socket.socket.id
+  );
+  const currentPlayer = players.find((p) => p.socketId === socket.socket.id);
+  const isAlive = currentPlayer ? currentPlayer.isAlive : true;
+
+  console.log("🗳️ Voting Debug:", {
+    totalPlayers: players.length,
+    alivePlayers: alivePlayers.length,
+    currentPlayer: currentPlayer?.name,
+    isAlive,
+    playersDetails: players.map((p) => ({
+      name: p.name,
+      isAlive: p.isAlive,
+      socketId: p.socketId,
+    })),
+  });
 
   const submitVote = () => {
-    if (selectedPlayer && !voteSubmitted) {
-      socket.emit("vote", { targetId: selectedPlayer });
+    if (selectedPlayer && !voteSubmitted && isAlive) {
+      console.log("📤 Voting: Submitting vote for player:", selectedPlayer);
+      socket.socket.emit("vote", { targetId: selectedPlayer });
       setVoteSubmitted(true);
     }
   };
 
   const renderPlayer = ({ item }) => {
-    const canVote = item.isAlive && !item.isCurrentPlayer && !voteSubmitted;
+    const canVote =
+      item.isAlive &&
+      item.socketId !== socket.socket.id &&
+      !voteSubmitted &&
+      isAlive;
     const isSelected = selectedPlayer === item.id;
     const voteCount = voteCounts[item.id] || 0;
 
-    if (!item.isAlive || item.isCurrentPlayer) return null;
+    if (!item.isAlive || item.socketId === socket.socket.id) return null;
 
     return (
       <TouchableOpacity
@@ -100,6 +156,16 @@ export default function VotingScreen({ navigation }) {
         warningColor="#f39c12"
         dangerColor="#c0392b"
       />
+
+      {!isAlive && (
+        <View style={styles.ghostContainer}>
+          <Text style={styles.ghostTitle}>👻 Ghost Mode</Text>
+          <Text style={styles.ghostText}>
+            You have been eliminated. You can watch the voting but cannot
+            participate.
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.instructions}>
         🕵️ Vote to eliminate the player you suspect is a killer!
@@ -169,6 +235,27 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 10,
     lineHeight: 22,
+  },
+  ghostContainer: {
+    backgroundColor: "rgba(139, 69, 19, 0.3)",
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#8B4513",
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  ghostTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#8B4513",
+    marginBottom: 8,
+  },
+  ghostText: {
+    fontSize: 14,
+    color: "#bbb",
+    textAlign: "center",
+    lineHeight: 20,
   },
   playersTitle: {
     fontSize: 18,

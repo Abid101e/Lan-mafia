@@ -15,6 +15,7 @@ import {
   Animated,
   Dimensions,
   Alert,
+  Image,
 } from "react-native";
 import { socket } from "../utils/socket";
 import { getRoleInfo } from "../constants/roles";
@@ -34,6 +35,9 @@ export default function NightPhaseScreen({ navigation }) {
 
   useEffect(() => {
     console.log("🌙 NightPhase screen mounted, setting up listeners");
+    console.log("🎭 Initial playerRole state:", playerRole);
+    console.log("🔌 Socket connected:", socket.socket.connected);
+    console.log("🆔 Socket ID:", socket.socket.id);
 
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -50,7 +54,9 @@ export default function NightPhaseScreen({ navigation }) {
 
     socket.socket.on("roleAssigned", (role) => {
       console.log("🎭 NightPhase: Role assigned:", role);
+      console.log("🎭 Previous role was:", playerRole);
       setPlayerRole(role);
+      console.log("🎭 Role state should now be:", role);
     });
 
     socket.socket.on("timerUpdate", (time) => {
@@ -67,11 +73,19 @@ export default function NightPhaseScreen({ navigation }) {
       }
     });
 
+    socket.socket.on("gameOver", (result) => {
+      console.log("🏁 NightPhase: Game over received:", result);
+      navigation.navigate("Win");
+    });
+
     // Request current role and players when component mounts
     if (socket.socket.connected) {
       console.log("📤 NightPhase: Requesting current role and players");
+      console.log("📤 Emitting getCurrentRole for socket:", socket.socket.id);
       socket.socket.emit("getCurrentRole");
       socket.socket.emit("getPlayers");
+    } else {
+      console.log("❌ Socket not connected, cannot request role");
     }
 
     return () => {
@@ -81,6 +95,7 @@ export default function NightPhaseScreen({ navigation }) {
       socket.socket.off("timerUpdate");
       socket.socket.off("nightActionResult");
       socket.socket.off("gamePhaseChanged");
+      socket.socket.off("gameOver");
     };
   }, [navigation]);
 
@@ -143,7 +158,21 @@ export default function NightPhaseScreen({ navigation }) {
   };
 
   const canSelectTarget = () => {
+    // Find current player to check if they're alive
+    const currentPlayer = players.find((p) => p.socketId === socket.socket.id);
+    const isAlive = currentPlayer ? currentPlayer.isAlive : true; // Default to true if not found yet
+
+    console.log("🔍 canSelectTarget debug:", {
+      currentPlayer: currentPlayer?.name,
+      isAlive,
+      playerRole,
+      actionSubmitted,
+      timeLeft,
+      roleCheck: ["killer", "healer", "police"].includes(playerRole),
+    });
+
     return (
+      isAlive &&
       ["killer", "healer", "police"].includes(playerRole) &&
       !actionSubmitted &&
       timeLeft > 0
@@ -153,26 +182,26 @@ export default function NightPhaseScreen({ navigation }) {
   const getInstructions = () => {
     switch (playerRole) {
       case "killer":
-        return "🔪 Choose a player to eliminate tonight";
+        return "Choose a player to eliminate tonight";
       case "healer":
-        return "💚 Choose a player to protect from harm";
+        return "Choose a player to protect from harm";
       case "police":
-        return "🔍 Choose a player to investigate their role";
+        return "Choose a player to investigate their role";
       default:
-        return "😴 Sleep tight! Wait for the morning to come...";
+        return "Sleep tight! Wait for the morning to come...";
     }
   };
 
   const getPhaseTitle = () => {
     switch (playerRole) {
       case "killer":
-        return "🌙 Killer's Turn";
+        return "Killer's Turn";
       case "healer":
-        return "🌙 Healer's Turn";
+        return "Healer's Turn";
       case "police":
-        return "🌙 Police Investigation";
+        return "Police Investigation";
       default:
-        return "🌙 Night Phase";
+        return "Night Phase";
     }
   };
 
@@ -182,23 +211,24 @@ export default function NightPhaseScreen({ navigation }) {
 
     switch (playerRole) {
       case "killer":
-        return "🔪 Eliminate Target";
+        return "Eliminate Target";
       case "healer":
-        return "💚 Protect Target";
+        return "Protect Target";
       case "police":
-        return "🔍 Investigate Target";
+        return "Investigate Target";
       default:
         return "Submit Action";
     }
   };
 
   const renderPlayer = ({ item }) => {
-    const isMyself = item.isCurrentPlayer;
-    const canSelect = canSelectTarget() && !isMyself && item.isAlive;
+    const isMyself = item.socketId === socket.socket.id;
+    const canSelect = canSelectTarget() && item.isAlive;
     const isSelected = selectedTarget === item.id;
 
-    // Healer cannot heal themselves
-    if (playerRole === "healer" && isMyself) {
+    // For killer and police: cannot target themselves
+    // For healer: can heal anyone including themselves
+    if ((playerRole === "killer" || playerRole === "police") && isMyself) {
       return null;
     }
 
@@ -234,6 +264,16 @@ export default function NightPhaseScreen({ navigation }) {
 
   const roleInfo = getRoleInfo(playerRole);
   const hasAction = canSelectTarget();
+  const currentPlayer = players.find((p) => p.socketId === socket.socket.id);
+  const isAlive = currentPlayer ? currentPlayer.isAlive : true;
+
+  console.log("🎬 NightPhase render debug:", {
+    playerRole,
+    hasAction,
+    currentPlayer: currentPlayer?.name,
+    isAlive,
+    playersCount: players.length,
+  });
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -248,9 +288,24 @@ export default function NightPhaseScreen({ navigation }) {
         dangerColor="#e74c3c"
       />
 
-      <View style={styles.roleInfoContainer}>
-        <Text style={styles.roleEmoji}>{roleInfo?.emoji || "😴"}</Text>
-        <Text style={styles.roleName}>{roleInfo?.name || "Townsperson"}</Text>
+      {!isAlive && (
+        <View style={styles.ghostContainer}>
+          <Text style={styles.ghostTitle}>Ghost Mode</Text>
+          <Text style={styles.ghostText}>
+            You have been eliminated. You can watch the game but cannot perform
+            any actions.
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.roleCardContainer}>
+        {roleInfo?.image && (
+          <Image source={roleInfo.image} style={styles.roleCardImage} />
+        )}
+        <View style={styles.roleCardContent}>
+          <Text style={styles.roleName}>{roleInfo?.name || "Townsperson"}</Text>
+          <Text style={styles.roleDescription}>{roleInfo?.description}</Text>
+        </View>
       </View>
 
       <Text style={styles.instructions}>{getInstructions()}</Text>
@@ -294,7 +349,7 @@ export default function NightPhaseScreen({ navigation }) {
       {!hasAction && (
         <View style={styles.waitingContainer}>
           <Text style={styles.waitingText}>
-            💤 You have no actions to perform tonight
+            You have no actions to perform tonight
           </Text>
           <Text style={styles.waitingSubtext}>
             Relax and wait for the morning phase
@@ -305,7 +360,7 @@ export default function NightPhaseScreen({ navigation }) {
       {actionSubmitted && (
         <View style={styles.submittedContainer}>
           <Text style={styles.submittedText}>
-            ✅ Your action has been submitted
+            Your action has been submitted
           </Text>
           <Text style={styles.submittedSubtext}>
             Waiting for other players to complete their actions...
@@ -330,23 +385,61 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  roleInfoContainer: {
-    backgroundColor: "#16213e",
-    padding: 20,
-    borderRadius: 15,
-    alignItems: "center",
+  ghostContainer: {
+    backgroundColor: "#2c2c54",
+    padding: 15,
+    borderRadius: 10,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#0f3460",
+    borderWidth: 2,
+    borderColor: "#7f8c8d",
+    alignItems: "center",
   },
-  roleEmoji: {
-    fontSize: 40,
-    marginBottom: 10,
+  ghostTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#bdc3c7",
+    marginBottom: 8,
+  },
+  ghostText: {
+    fontSize: 14,
+    color: "#95a5a6",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  roleCardContainer: {
+    backgroundColor: "#16213e",
+    borderRadius: 20,
+    marginBottom: 25,
+    borderWidth: 2,
+    borderColor: "#4ecdc4",
+    overflow: "hidden",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  roleCardImage: {
+    width: "100%",
+    height: 200,
+    resizeMode: "cover",
+  },
+  roleCardContent: {
+    padding: 20,
+    alignItems: "center",
   },
   roleName: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  roleDescription: {
+    fontSize: 16,
+    color: "#a8b2d1",
+    textAlign: "center",
+    lineHeight: 22,
   },
   instructions: {
     fontSize: 16,

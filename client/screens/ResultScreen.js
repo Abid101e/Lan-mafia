@@ -37,9 +37,15 @@ export default function ResultScreen({ navigation }) {
       }
     });
 
+    socket.on("gameOver", (result) => {
+      console.log("🏁 Result: Game over received:", result);
+      navigation.navigate("Win");
+    });
+
     return () => {
       socket.off("roundResults");
       socket.off("gamePhaseChanged");
+      socket.off("gameOver");
     };
   }, [navigation]);
 

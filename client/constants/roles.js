@@ -18,7 +18,6 @@
  * - roleColors: role-specific UI colors
  */
 
-
 export const ROLE_TYPES = {
   KILLER: "killer",
   HEALER: "healer",
@@ -30,6 +29,7 @@ export const ROLES = {
   [ROLE_TYPES.KILLER]: {
     name: "Killer",
     emoji: "🔪",
+    image: require("../assets/mafia.jpg"),
     description: "Eliminate other players during the night phase",
     team: "mafia",
     canAct: true,
@@ -41,6 +41,7 @@ export const ROLES = {
   [ROLE_TYPES.HEALER]: {
     name: "Healer",
     emoji: "💚",
+    image: require("../assets/healer.jpg"),
     description: "Protect players from being eliminated",
     team: "town",
     canAct: true,
@@ -52,6 +53,7 @@ export const ROLES = {
   [ROLE_TYPES.POLICE]: {
     name: "Police",
     emoji: "👮",
+    image: require("../assets/police.jpg"),
     description: "Investigate players to learn their role",
     team: "town",
     canAct: true,

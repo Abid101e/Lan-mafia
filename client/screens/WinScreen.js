@@ -50,7 +50,7 @@ export default function WinScreen({ navigation }) {
 
   const returnToLobby = () => {
     socket.emit("leaveGame");
-    navigation.navigate("Lobby");
+    navigation.navigate("Home");
   };
 
   const restartGame = () => {
@@ -129,7 +129,7 @@ export default function WinScreen({ navigation }) {
           style={[styles.button, styles.lobbyButton]}
           onPress={returnToLobby}
         >
-          <Text style={styles.buttonText}>🏠 Return to Lobby</Text>
+          <Text style={styles.buttonText}>🏠 Return to Home</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>

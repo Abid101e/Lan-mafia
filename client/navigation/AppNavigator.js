@@ -5,7 +5,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeScreen from "../screens/HomeScreen";
 import JoinGameScreen from "../screens/JoinGameScreen";
 import HostLobbyScreen from "../screens/HostLobbyScreen";
-import LobbyScreen from "../screens/LobbyScreen";
 import HostSettingsScreen from "../screens/HostSettingsScreen";
 import RoleRevealScreen from "../screens/RoleRevealScreen";
 import NightPhaseScreen from "../screens/NightPhaseScreen";
@@ -30,7 +29,6 @@ export default function AppNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="JoinGame" component={JoinGameScreen} />
         <Stack.Screen name="HostLobby" component={HostLobbyScreen} />
-        <Stack.Screen name="Lobby" component={LobbyScreen} />
         <Stack.Screen name="HostSettings" component={HostSettingsScreen} />
         <Stack.Screen name="RoleReveal" component={RoleRevealScreen} />
         <Stack.Screen name="NightPhase" component={NightPhaseScreen} />

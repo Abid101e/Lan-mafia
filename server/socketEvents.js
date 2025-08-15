@@ -22,6 +22,10 @@ const gameState = require("./state");
 const settings = require("./settings");
 const logger = require("./utils/logger");
 const gameDiscovery = require("./utils/gameDiscovery");
+
+// Global timer tracking
+let currentPhaseTimer = null;
+
 const {
   validatePlayerName,
   validateGameSettings,
@@ -274,11 +278,19 @@ function setupSocketEvents(io) {
     socket.on("nightAction", (data) => {
       try {
         const { action, target } = data;
+        console.log(
+          `🌙 Night action received: ${action} on ${target} from socket ${socket.id}`
+        );
+
         const player = gameState.getPlayerBySocketId(socket.id);
 
         if (!player) {
           throw createPlayerError("Player not found", socket.id);
         }
+
+        console.log(
+          `🌙 Player ${player.name} (${player.role}) wants to ${action} ${target}`
+        );
 
         if (!player.isAlive) {
           throw createPlayerError(
@@ -300,20 +312,35 @@ function setupSocketEvents(io) {
         logger.game(`${player.name} performed ${action} on ${target}`);
 
         // Record the action
-        gameState.addNightAction({
+        const nightAction = {
           playerId: player.id,
           action,
           target,
           role: player.role,
-        });
+        };
+        console.log(`🌙 Adding night action:`, nightAction);
+        gameState.addNightAction(nightAction);
+
+        const currentNightActions = gameState.getNightActions();
+        console.log(`🌙 Current night actions:`, currentNightActions);
 
         // Check if all night actions are complete
-        if (
-          gameLogic.areAllNightActionsComplete(
-            gameState.getPlayers(),
-            gameState.getNightActions()
-          )
-        ) {
+        const allComplete = gameLogic.areAllNightActionsComplete(
+          gameState.getPlayers(),
+          currentNightActions
+        );
+        console.log(`🌙 All night actions complete?`, allComplete);
+
+        if (allComplete) {
+          console.log(
+            "🌙 All players completed actions early - stopping timer and proceeding"
+          );
+          // Clear the current phase timer since all actions are complete
+          if (currentPhaseTimer) {
+            clearInterval(currentPhaseTimer);
+            currentPhaseTimer = null;
+            console.log("⏰ Phase timer cleared - all actions complete");
+          }
           processNightPhase(io);
         }
       } catch (error) {
@@ -356,10 +383,84 @@ function setupSocketEvents(io) {
             gameState.getVotes()
           )
         ) {
+          console.log(
+            "🗳️ All players voted early - stopping timer and proceeding"
+          );
+          // Clear the current phase timer since all votes are complete
+          if (currentPhaseTimer) {
+            clearInterval(currentPhaseTimer);
+            currentPhaseTimer = null;
+            console.log("⏰ Phase timer cleared - all votes complete");
+          }
           processVotingPhase(io);
         }
       } catch (error) {
         handleSocketError(socket, error, "vote");
+      }
+    });
+
+    // Discussion phase ready status
+    socket.on("discussionReady", (data) => {
+      try {
+        const player = gameState.getPlayerBySocketId(socket.id);
+
+        if (!player || !player.isAlive) {
+          throw createPlayerError(
+            "Cannot set ready status - player not found or dead",
+            player?.id
+          );
+        }
+
+        if (gameState.getCurrentPhase() !== "discussion") {
+          throw createGameStateError("Not in discussion phase");
+        }
+
+        console.log(`💬 ${player.name} is ready to proceed to voting`);
+
+        // Add to ready list if not already there
+        if (!gameState.discussionReadyPlayers) {
+          gameState.discussionReadyPlayers = [];
+        }
+
+        if (!gameState.discussionReadyPlayers.includes(player.id)) {
+          gameState.discussionReadyPlayers.push(player.id);
+        }
+
+        // Check if all alive players are ready
+        const alivePlayers = gameState.getAlivePlayers();
+        const allReady = alivePlayers.every((p) =>
+          gameState.discussionReadyPlayers.includes(p.id)
+        );
+
+        console.log(
+          `💬 Discussion ready players: ${gameState.discussionReadyPlayers.length}/${alivePlayers.length}`
+        );
+
+        if (allReady && alivePlayers.length > 0) {
+          console.log(
+            "💬 All players ready for voting - stopping timer and proceeding"
+          );
+          // Clear the current phase timer since all players are ready
+          if (currentPhaseTimer) {
+            clearInterval(currentPhaseTimer);
+            currentPhaseTimer = null;
+            console.log("⏰ Discussion timer cleared - all players ready");
+          }
+
+          // Clear the ready status for next round
+          gameState.discussionReadyPlayers = [];
+
+          startVotingPhase(io);
+        } else {
+          // Broadcast ready status update
+          io.emit("discussionReadyUpdate", {
+            readyCount: gameState.discussionReadyPlayers.length,
+            totalCount: alivePlayers.length,
+            readyPlayers: gameState.discussionReadyPlayers,
+          });
+        }
+      } catch (error) {
+        handleSocketError(socket, error, "discussionReady");
       }
     });
 
@@ -508,48 +609,146 @@ function startNightPhase(io) {
   io.emit("gamePhaseChanged", "night");
 
   // Start night phase timer
-  const nightTimer = settings.getCurrentSettings().nightTimer;
-  startPhaseTimer(io, nightTimer, () => {
+  const currentSettings = settings.getCurrentSettings();
+  const nightTimer =
+    currentSettings.nightTimer || currentSettings.timers?.nightTimer || 30;
+  console.log("🌙 Night timer setting:", nightTimer);
+  console.log("🌙 Current settings:", currentSettings);
+
+  const timer = startPhaseTimer(io, nightTimer, () => {
     processNightPhase(io);
   });
+
+  console.log("🌙 Night phase timer started:", timer ? "success" : "failed");
 }
 
 /**
  * Process night phase results
  */
+let nightPhaseProcessing = false; // Prevent double processing
+
 function processNightPhase(io) {
+  console.log("🌙 processNightPhase called - starting night phase processing");
+
+  if (nightPhaseProcessing) {
+    console.log("🌙 Night phase already processing, skipping duplicate call");
+    return;
+  }
+
+  nightPhaseProcessing = true;
   logger.game("Processing night phase");
 
   const nightActions = gameState.getNightActions();
-  const results = gameLogic.processNightActions(
-    nightActions,
-    gameState.getPlayers()
+  console.log("🌙 Retrieved night actions:", nightActions);
+
+  const players = gameState.getPlayers();
+  console.log(
+    "🌙 Current players:",
+    players.map((p) => ({ name: p.name, role: p.role, isAlive: p.isAlive }))
   );
 
+  const results = gameLogic.processNightActions(nightActions, players);
+  console.log("🌙 Night processing results:", results);
+
   // Apply results to game state
+  console.log("🌙 Applying death results:", results.deaths);
   results.deaths.forEach((playerId) => {
+    console.log(`🌙 Killing player: ${playerId}`);
     gameState.killPlayer(playerId);
   });
 
   // Check win condition
+  console.log("🌙 Checking win condition...");
   const winCheck = gameLogic.checkWinCondition(gameState.getPlayers());
+  console.log("🌙 Win check result:", winCheck);
+
   if (winCheck.gameOver) {
+    console.log("🌙 Game over detected, ending game");
+    nightPhaseProcessing = false;
     endGame(io, winCheck);
     return;
   }
 
+  console.log("🌙 No game over, transitioning to discussion phase");
   // Move to discussion phase
   gameState.setPhase("discussion");
+  console.log("🌙 Phase set to discussion");
 
-  io.emit("nightResults", results);
+  // Prepare public night results (including public investigation info)
+  const publicResults = {
+    ...results,
+    investigations: results.investigations.map((inv) => ({
+      publicMessage: inv.publicMessage,
+    })),
+  };
+  console.log("🌙 Prepared public results:", publicResults);
+
+  console.log("🌙 Emitting nightResults...");
+  io.emit("nightResults", publicResults);
+
+  console.log("🌙 Emitting gamePhaseChanged to discussion...");
   io.emit("gamePhaseChanged", "discussion");
+
+  console.log("🌙 Emitting playersUpdated...");
   io.emit("playersUpdated", gameState.getPlayers());
 
+  // Send investigation results privately to investigators
+  console.log("🌙 Sending private investigation results...");
+  results.investigations.forEach((investigation) => {
+    const investigatorPlayer = gameState.getPlayerById(
+      investigation.investigator
+    );
+    if (investigatorPlayer) {
+      const investigatorSocket = io.sockets.sockets.get(
+        investigatorPlayer.socketId
+      );
+      if (investigatorSocket) {
+        investigatorSocket.emit("investigationResult", {
+          targetName: investigation.targetName,
+          result: investigation.result,
+          message: `Your investigation of ${investigation.targetName} revealed they are ${investigation.result}.`,
+        });
+        console.log(
+          `🔍 Sent investigation result to ${investigatorPlayer.name}: ${investigation.targetName} is ${investigation.result}`
+        );
+      } else {
+        console.log(
+          `❌ No socket found for investigator ${investigatorPlayer.name}`
+        );
+      }
+    } else {
+      console.log(
+        `❌ No investigator player found for ID ${investigation.investigator}`
+      );
+    }
+  });
+
   // Start discussion timer
-  const discussionTimer = settings.getCurrentSettings().discussionTimer;
-  startPhaseTimer(io, discussionTimer, () => {
+  const currentSettings = settings.getCurrentSettings();
+  const discussionTimer =
+    currentSettings.discussionTimer ||
+    currentSettings.timers?.discussionTimer ||
+    120;
+  console.log("💬 Discussion timer setting:", discussionTimer);
+  console.log("💬 Current settings:", currentSettings);
+  console.log("💬 Timers structure:", currentSettings.timers);
+
+  // Reset discussion ready players for new discussion phase
+  gameState.discussionReadyPlayers = [];
+  console.log("💬 Reset discussion ready players for new discussion phase");
+
+  console.log("💬 Starting discussion timer...");
+  const timer = startPhaseTimer(io, discussionTimer, () => {
     startVotingPhase(io);
   });
+
+  console.log(
+    "💬 Discussion phase timer started:",
+    timer ? "success" : "failed"
+  );
+
+  nightPhaseProcessing = false; // Reset processing flag
+  console.log("🌙 Night phase processing completed successfully");
 }
 
 /**
@@ -562,9 +761,14 @@ function startVotingPhase(io) {
   gameState.clearVotes();
 
   io.emit("gamePhaseChanged", "voting");
+  io.emit("playersUpdated", gameState.getPlayers());
 
   // Start voting timer
-  const votingTimer = settings.getCurrentSettings().votingTimer;
+  const currentSettings = settings.getCurrentSettings();
+  const votingTimer =
+    currentSettings.votingTimer || currentSettings.timers?.votingTimer || 60;
+  console.log("🗳️ Voting timer setting:", votingTimer);
+
   startPhaseTimer(io, votingTimer, () => {
     processVotingPhase(io);
   });
@@ -608,18 +812,26 @@ function processVotingPhase(io) {
  * End the game
  */
 function endGame(io, winResult) {
+  console.log("🏁 endGame called with result:", winResult);
   logger.game(`Game over - ${winResult.winner} wins!`);
 
   gameState.setPhase("game_over");
+  console.log("🏁 Game phase set to game_over");
 
-  io.emit("gameOver", {
+  const gameOverData = {
     winner: winResult.winner,
     reason: winResult.reason,
     players: gameState.getPlayers(),
-  });
+  };
+
+  console.log("🏁 Emitting gameOver event with data:", gameOverData);
+  io.emit("gameOver", gameOverData);
+
+  console.log("🏁 Game over event emitted successfully");
 
   // Reset game after delay
   setTimeout(() => {
+    console.log("🏁 Resetting game after delay");
     gameState.resetGame();
   }, 30000);
 }
@@ -628,19 +840,36 @@ function endGame(io, winResult) {
  * Start a phase timer
  */
 function startPhaseTimer(io, duration, onComplete) {
+  console.log("⏰ Starting phase timer with duration:", duration);
+
+  // Clear any existing timer first
+  if (currentPhaseTimer) {
+    console.log("⏰ Clearing previous timer");
+    clearInterval(currentPhaseTimer);
+    currentPhaseTimer = null;
+  }
+
+  if (!duration || duration <= 0) {
+    console.log("❌ Invalid timer duration:", duration);
+    return null;
+  }
+
   let timeLeft = duration;
 
-  const timer = setInterval(() => {
+  currentPhaseTimer = setInterval(() => {
+    console.log("⏰ Timer tick, timeLeft:", timeLeft);
     io.emit("timerUpdate", timeLeft);
     timeLeft--;
 
     if (timeLeft < 0) {
-      clearInterval(timer);
+      console.log("⏰ Timer completed, calling onComplete");
+      clearInterval(currentPhaseTimer);
+      currentPhaseTimer = null;
       onComplete();
     }
   }, 1000);
 
-  return timer;
+  return currentPhaseTimer;
 }
 
 module.exports = { setupSocketEvents };

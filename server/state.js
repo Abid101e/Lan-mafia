@@ -1,20 +1,3 @@
-/**
- * Game State Management for LAN Mafia
- *
- * Centralized state management for all game data including players,
- * game phase, actions, votes, and settings.
- */
-/**
- * Stores and manages in-memory game state for LAN Mafia.
- * Includes:
- * - connected players
- * - player roles
- * - alive/dead status
- * - current game phase
- * - action/vote history
- * Should expose getter and setter functions to update state from other modules.
- */
-
 class GameState {
   constructor() {
     this.reset();
@@ -34,6 +17,7 @@ class GameState {
     this.roleAssignments = [];
     this.roundNumber = 0;
     this.readyPlayers = []; // Track which players are ready
+    this.discussionReadyPlayers = []; // Track which players are ready for voting
   }
 
   // Player management
