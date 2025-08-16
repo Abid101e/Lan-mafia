@@ -11,14 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { socket } from "../utils/socket";
 
 export default function HostSettingsScreen({ navigation }) {
-  console.log("🔄 HostSettingsScreen component rendering...");
-
   const [players, setPlayers] = useState([]);
-
-  // Debug players state changes
-  useEffect(() => {
-    console.log("👥 Players state changed:", players.length, players);
-  }, [players]);
 
   const [gameSettings, setGameSettings] = useState({
     killers: 1, // Default 1
@@ -30,94 +23,46 @@ export default function HostSettingsScreen({ navigation }) {
   });
 
   useEffect(() => {
-    console.log("🚀 HostSettingsScreen mounted, setting up socket listeners");
-    console.log("🔌 Socket connected:", socket?.socket?.connected);
-    console.log("🆔 Socket ID:", socket?.socket?.id);
-
     if (!socket?.socket) {
-      console.log("❌ No socket available");
       return;
     }
 
-    // Add debugging to see what players data is received
     const handlePlayersUpdated = (playersData) => {
-      console.log("📥 Received playersUpdated:", playersData);
-      console.log("📊 Players count:", playersData ? playersData.length : 0);
-      console.log("📋 Players details:", JSON.stringify(playersData, null, 2));
       setPlayers(playersData || []);
     };
 
     const handlePlayersResponse = (playersData) => {
-      console.log("📥 Received playersResponse:", playersData);
-      console.log("📊 Players count:", playersData ? playersData.length : 0);
-      console.log("📋 Players details:", JSON.stringify(playersData, null, 2));
       setPlayers(playersData || []);
     };
 
     // Use socket.socket (the actual socket.io instance)
     socket.socket.on("playersUpdated", handlePlayersUpdated);
     socket.socket.on("playersResponse", handlePlayersResponse);
-    socket.socket.on("gameStarted", () => navigation.navigate("RoleReveal"));
+    socket.socket.on("gameStarted", () => navigation.navigate("NightPhase"));
     socket.socket.on("error", (error) => Alert.alert("Error", error.message));
 
-    // Add a test listener to see if ANY events are being received
-    socket.socket.on("connect", () => {
-      console.log("🔥 Settings screen detected socket connect event");
-    });
-
-    socket.socket.on("disconnect", () => {
-      console.log("🔥 Settings screen detected socket disconnect event");
-    });
-
-    // Also listen for any other events that might be coming through
-    socket.socket.onAny((eventName, ...args) => {
-      console.log(`🔥 Settings screen received event: ${eventName}`, args);
-    });
-
     // Request current players when component mounts
-    console.log("🔄 Requesting current players...");
-    console.log("🔌 Socket before request:", {
-      connected: socket?.socket?.connected,
-      id: socket?.socket?.id,
-      hasSocket: !!socket?.socket,
-    });
-
     if (socket?.socket?.connected) {
       socket.socket.emit("getPlayers", {});
-      console.log("✅ getPlayers request sent");
 
       // Also request again after a short delay in case the first one doesn't work
       setTimeout(() => {
         socket.socket.emit("getPlayers", {});
-        console.log("✅ Second getPlayers request sent");
       }, 1000);
-    } else {
-      console.log("❌ Socket not connected, cannot send getPlayers request");
     }
 
-    // Add a timeout to check if we received data
-    setTimeout(() => {
-      console.log("⏰ Timeout check - players length:", players.length);
-    }, 2000);
-
     return () => {
-      console.log("🧹 HostSettingsScreen cleanup");
       if (socket?.socket) {
         socket.socket.off("playersUpdated", handlePlayersUpdated);
         socket.socket.off("playersResponse", handlePlayersResponse);
         socket.socket.off("gameStarted");
         socket.socket.off("error");
-        socket.socket.off("connect");
-        socket.socket.off("disconnect");
-        socket.socket.offAny(); // Remove the catch-all listener
       }
     };
   }, []);
 
-  // Listen for focus to refresh players data
   useFocusEffect(
     useCallback(() => {
-      console.log("👁️ HostSettingsScreen gained focus, requesting players");
       if (socket?.socket?.connected) {
         socket.socket.emit("getPlayers", {});
       }
@@ -134,15 +79,11 @@ export default function HostSettingsScreen({ navigation }) {
       0,
       players.length - killers - healers - police
     );
-    console.log(
-      `🏘️ Calculating townspeople: ${players.length} - ${killers} - ${healers} - ${police} = ${townspeople}`
-    );
     return townspeople;
   };
 
   const getMaxValue = (role) => {
     const playerCount = players.length || 3; // Fallback to 3 if no players loaded yet
-    console.log(`📊 Getting max for ${role}, playerCount: ${playerCount}`);
 
     switch (role) {
       case "killers":
@@ -172,7 +113,7 @@ export default function HostSettingsScreen({ navigation }) {
 
     // For 3-player testing, allow 0 townspeople
     if (players.length === 3 && calculateTownspeople() === 0) {
-      console.log("⚠️ 3-player testing mode: allowing 0 townspeople");
+      // Allow 0 townspeople for 3-player testing
     } else if (calculateTownspeople() < 1) {
       Alert.alert(
         "Error",
@@ -185,10 +126,6 @@ export default function HostSettingsScreen({ navigation }) {
   };
 
   const startGame = () => {
-    console.log("🎮 Starting game...");
-    console.log("📊 Current players:", players.length, players);
-    console.log("⚙️ Current gameSettings:", gameSettings);
-
     if (!validateSettings()) return;
 
     const finalSettings = {

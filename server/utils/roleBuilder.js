@@ -19,36 +19,33 @@ const { shuffle } = require("./shuffle");
  * @returns {Array} Array of role strings for assignment
  */
 function buildRoleList(settings) {
-  console.log("🎭 Building role list from settings:", settings);
+  const roleConfigs = [
+    { role: "killer", count: settings.killers || settings.roles?.killers || 2 },
+    { role: "healer", count: settings.healers || settings.roles?.healers || 1 },
+    { role: "police", count: settings.police || settings.roles?.police || 1 },
+  ];
 
   const roles = [];
+  let specialRoleCount = 0;
 
-  // Add killers
-  for (let i = 0; i < (settings.killers || settings.roles?.killers || 2); i++) {
-    roles.push("killer");
+  for (const { role, count } of roleConfigs) {
+    for (let i = 0; i < count; i++) {
+      roles.push(role);
+    }
+    specialRoleCount += count;
   }
 
-  // Add healers
-  for (let i = 0; i < (settings.healers || settings.roles?.healers || 1); i++) {
-    roles.push("healer");
-  }
-
-  // Add police
-  for (let i = 0; i < (settings.police || settings.roles?.police || 1); i++) {
-    roles.push("police");
-  }
-
-  // Add townspeople
-  const townspeopleCount =
+  const townspeopleCount = Math.max(
+    0,
     settings.townspeople ||
-    settings.roles?.townspeople ||
-    settings.totalPlayers - roles.length;
+      settings.roles?.townspeople ||
+      (settings.totalPlayers || 8) - specialRoleCount
+  );
 
   for (let i = 0; i < townspeopleCount; i++) {
     roles.push("townsperson");
   }
 
-  console.log("✅ Role list built:", roles);
   return roles;
 }
 
@@ -170,7 +167,6 @@ function getRecommendedRoles(playerCount) {
     20: { killers: 5, healers: 3, police: 2, townspeople: 10 },
   };
 
-  // Return exact match or closest recommendation
   if (recommendations[playerCount]) {
     return recommendations[playerCount];
   }

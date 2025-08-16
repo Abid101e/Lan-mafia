@@ -27,6 +27,8 @@ export default function WinScreen({ navigation }) {
   const [celebrateAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
+    console.log("🏁 WinScreen mounted, setting up listeners");
+
     Animated.sequence([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -41,12 +43,27 @@ export default function WinScreen({ navigation }) {
       }),
     ]).start();
 
-    socket.on("gameOver", setGameResult);
+    // Request game result when screen mounts (in case event was missed)
+    console.log("🏁 Requesting game result...");
+    setTimeout(() => {
+      socket.emit("getGameResult");
+    }, 100);
+
+    socket.on("gameOver", (result) => {
+      console.log("🏁 WinScreen received gameOver:", result);
+      setGameResult(result);
+    });
+
+    socket.on("gameReset", () => {
+      console.log("🔄 Game reset received, returning to lobby");
+      navigation.navigate("HostLobby");
+    });
 
     return () => {
       socket.off("gameOver");
+      socket.off("gameReset");
     };
-  }, []);
+  }, [navigation]);
 
   const returnToLobby = () => {
     socket.emit("leaveGame");
@@ -58,6 +75,7 @@ export default function WinScreen({ navigation }) {
   };
 
   if (!gameResult) {
+    console.log("🏁 WinScreen: No game result yet, showing loading...");
     return (
       <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
         <View style={styles.loadingContainer}>
@@ -69,6 +87,8 @@ export default function WinScreen({ navigation }) {
       </Animated.View>
     );
   }
+
+  console.log("🏁 WinScreen: Displaying game result:", gameResult);
 
   const renderPlayer = ({ item }) => (
     <View style={[styles.playerItem, !item.isAlive && styles.deadPlayer]}>

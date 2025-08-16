@@ -26,10 +26,14 @@ class SocketManager {
     this.socket = null;
     this.isConnected = false;
     this.hostIP = null;
+    // Performance optimizations
+    this._eventHandlers = new Map();
+    this._connectionCache = new Map();
+    this._reconnectTimeout = null;
   }
 
   /**
-   * Connect to host server
+   * Connect to host server with caching
    * @param {string} hostIP - IP address of the host server
    * @param {number} port - Port number (default: 3000)
    */
@@ -37,6 +41,13 @@ class SocketManager {
     try {
       this.hostIP = hostIP;
       const serverURL = `http://${hostIP}:${port}`;
+
+      // Check if we already have a working connection to this host
+      const cacheKey = `${hostIP}:${port}`;
+      if (this._connectionCache.has(cacheKey) && this.socket?.connected) {
+        console.log(`Reusing existing connection to: ${serverURL}`);
+        return this.socket;
+      }
 
       // Disconnect existing connection if any
       if (this.socket) {
@@ -55,6 +66,9 @@ class SocketManager {
 
       console.log(`Attempting to connect to: ${serverURL}`);
 
+      // Cache the connection
+      this._connectionCache.set(cacheKey, true);
+
       // Set up connection event handlers
       this.setupEventHandlers();
 
@@ -66,39 +80,60 @@ class SocketManager {
   }
 
   /**
-   * Set up socket event handlers
+   * Set up socket event handlers with caching
    */
   setupEventHandlers() {
     if (!this.socket) return;
 
-    this.socket.on("connect", () => {
-      this.isConnected = true;
-      console.log(`✅ Successfully connected to host server: ${this.hostIP}`);
-    });
+    // Cache frequently used handlers to avoid recreation
+    if (!this._eventHandlers.has("connect")) {
+      this._eventHandlers.set("connect", () => {
+        this.isConnected = true;
+        console.log(`✅ Successfully connected to host server: ${this.hostIP}`);
+      });
+    }
 
-    this.socket.on("disconnect", (reason) => {
-      this.isConnected = false;
-      console.log(`❌ Disconnected from host server. Reason: ${reason}`);
-    });
+    if (!this._eventHandlers.has("disconnect")) {
+      this._eventHandlers.set("disconnect", (reason) => {
+        this.isConnected = false;
+        console.log(`❌ Disconnected from host server. Reason: ${reason}`);
+      });
+    }
 
-    this.socket.on("connect_error", (error) => {
-      console.error(
-        `❌ Connection error to ${this.hostIP}:`,
-        error.message || error
-      );
-      this.isConnected = false;
-    });
+    if (!this._eventHandlers.has("connect_error")) {
+      this._eventHandlers.set("connect_error", (error) => {
+        console.error(
+          `❌ Connection error to ${this.hostIP}:`,
+          error.message || error
+        );
+        this.isConnected = false;
+      });
+    }
 
-    this.socket.on("reconnect", (attemptNumber) => {
-      console.log(
-        `🔄 Reconnected to ${this.hostIP} after ${attemptNumber} attempts`
-      );
-      this.isConnected = true;
-    });
+    if (!this._eventHandlers.has("reconnect")) {
+      this._eventHandlers.set("reconnect", (attemptNumber) => {
+        console.log(
+          `🔄 Reconnected to ${this.hostIP} after ${attemptNumber} attempts`
+        );
+        this.isConnected = true;
+      });
+    }
 
-    this.socket.on("reconnect_error", (error) => {
-      console.error("Reconnection error:", error);
-    });
+    if (!this._eventHandlers.has("reconnect_error")) {
+      this._eventHandlers.set("reconnect_error", (error) => {
+        console.error("Reconnection error:", error);
+      });
+    }
+
+    // Attach cached handlers
+    this.socket.on("connect", this._eventHandlers.get("connect"));
+    this.socket.on("disconnect", this._eventHandlers.get("disconnect"));
+    this.socket.on("connect_error", this._eventHandlers.get("connect_error"));
+    this.socket.on("reconnect", this._eventHandlers.get("reconnect"));
+    this.socket.on(
+      "reconnect_error",
+      this._eventHandlers.get("reconnect_error")
+    );
   }
 
   /**

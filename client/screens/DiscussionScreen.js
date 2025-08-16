@@ -32,9 +32,15 @@ export default function DiscussionScreen({ navigation }) {
       useNativeDriver: true,
     }).start();
 
+    // Request current players when discussion screen mounts (with small delay)
+    console.log("💬 Requesting current players...");
+    setTimeout(() => {
+      socket.emit("getPlayers");
+    }, 100);
+
     socket.socket.on("playersUpdated", (players) => {
       console.log("👥 Discussion: Players updated:", players);
-      setPlayers(players);
+      setPlayers(players || []);
     });
 
     socket.socket.on("timerUpdate", (time) => {

@@ -14,14 +14,19 @@ const config = require("./config");
 
 class GameSettings {
   constructor() {
+    this._defaultSettings = null; // Cache for default settings
     this.currentSettings = this.getDefaultSettings();
   }
 
   /**
-   * Get default game settings
+   * Get default game settings (cached)
    */
   getDefaultSettings() {
-    // Try to get from config, fallback to hardcoded values
+    if (this._defaultSettings) {
+      return { ...this._defaultSettings }; // Return copy of cached settings
+    }
+
+    // Create default settings once and cache them
     const configDefaults = config.get
       ? {
           totalPlayers: config.get("game.maxPlayers") || 8,
@@ -40,7 +45,7 @@ class GameSettings {
         }
       : {};
 
-    return {
+    this._defaultSettings = {
       totalPlayers: configDefaults.totalPlayers || 8,
       roles: {
         killers: 2,
@@ -49,18 +54,20 @@ class GameSettings {
         townspeople: 4,
       },
       timers: configDefaults.timers || {
-        nightTimer: 30, // seconds
-        discussionTimer: 120, // seconds
-        votingTimer: 60, // seconds
-        roleRevealTimer: 10, // seconds
+        nightTimer: 30,
+        discussionTimer: 120,
+        votingTimer: 60,
+        roleRevealTimer: 10,
       },
       rules: configDefaults.rules || {
-        allowSelfHeal: false, // Can healer heal themselves?
-        revealRoleOnDeath: true, // Show role when player dies?
-        allowSpectatorChat: false, // Can dead players see chat?
-        randomizeRoleOrder: true, // Randomize role assignment?
+        allowSelfHeal: false,
+        revealRoleOnDeath: true,
+        allowSpectatorChat: false,
+        randomizeRoleOrder: true,
       },
     };
+
+    return { ...this._defaultSettings }; // Return copy
   }
 
   /**
@@ -68,8 +75,6 @@ class GameSettings {
    * @param {Object} newSettings - New settings to apply
    */
   updateSettings(newSettings) {
-    console.log("⚙️ Updating game settings:", newSettings);
-
     // Validate settings before applying
     const validatedSettings = this.validateSettings(newSettings);
 
@@ -79,7 +84,6 @@ class GameSettings {
       ...validatedSettings,
     };
 
-    console.log("✅ Settings updated successfully");
     return this.currentSettings;
   }
 
@@ -183,7 +187,6 @@ class GameSettings {
    * Reset to default settings
    */
   resetToDefaults() {
-    console.log("🔄 Resetting to default settings");
     this.currentSettings = this.getDefaultSettings();
     return this.currentSettings;
   }

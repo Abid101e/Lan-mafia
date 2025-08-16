@@ -1,18 +1,20 @@
-# 🔧 LAN Mafia Hotspot Troubleshooting Guide
+# LAN Mafia Hotspot Troubleshooting Guide
 
-## 🚨 **Common Issues & Solutions**
+## Common Issues & Solutions
 
 ### **1. Host Server Won't Start**
 
 **Problem:** "Failed to start server" error
 
 **Solutions:**
-- ✅ Turn ON mobile hotspot first
-- ✅ Make sure hotspot is active and has password
-- ✅ Check if port 3000 is available
-- ✅ Restart the app and try again
+
+- Turn ON mobile hotspot first
+- Make sure hotspot is active and has password
+- Check if port 3000 is available
+- Restart the app and try again
 
 **Debug Steps:**
+
 ```bash
 # Check if server is running
 curl http://192.168.43.1:3000/health
@@ -26,12 +28,14 @@ node server/hostServer.js
 **Problem:** "Connection failed" when joining
 
 **Solutions:**
-- ✅ Connect to host's hotspot first
-- ✅ Use correct IP: `192.168.43.1`
-- ✅ Make sure host server is running
-- ✅ Check if firewall blocks connections
+
+- Connect to host's hotspot first
+- Use correct IP: `192.168.43.1`
+- Make sure host server is running
+- Check if firewall blocks connections
 
 **Debug Steps:**
+
 ```bash
 # Test connection from player device
 node test-server.js
@@ -45,12 +49,14 @@ ping 192.168.43.1
 **Problem:** Host shows "WAITING FOR PLAYERS TO CONNECT"
 
 **Solutions:**
-- ✅ Players must connect to hotspot first
-- ✅ Players must use correct IP address
-- ✅ Host must start server before players join
-- ✅ Check server console for connection logs
+
+- Players must connect to hotspot first
+- Players must use correct IP address
+- Host must start server before players join
+- Check server console for connection logs
 
 **Debug Steps:**
+
 ```bash
 # Check server status
 curl http://192.168.43.1:3000/debug
@@ -64,32 +70,36 @@ curl http://192.168.43.1:3000/health
 **Problem:** "LAUNCH SIMULATION" button disabled
 
 **Solutions:**
-- ✅ Need at least 4 players connected
-- ✅ All players must be on same network
-- ✅ Host must be the first player
-- ✅ Wait for all connections to stabilize
+
+- Need at least 4 players connected
+- All players must be on same network
+- Host must be the first player
+- Wait for all connections to stabilize
 
 ### **5. Connection Drops**
 
 **Problem:** Players get disconnected during game
 
 **Solutions:**
-- ✅ Keep hotspot active
-- ✅ Don't switch WiFi networks
-- ✅ Keep devices close to host
-- ✅ Check battery levels
+
+- Keep hotspot active
+- Don't switch WiFi networks
+- Keep devices close to host
+- Check battery levels
 
 ## 🔍 **Step-by-Step Debugging**
 
 ### **For Host:**
 
 1. **Check Hotspot Status**
+
    ```
    Settings → Network → Hotspot & Tethering
    Make sure "Mobile Hotspot" is ON
    ```
 
 2. **Start Server**
+
    ```
    Open LAN Mafia app
    Enter name → "⚡ INITIATE HOST"
@@ -107,12 +117,14 @@ curl http://192.168.43.1:3000/health
 ### **For Players:**
 
 1. **Connect to Hotspot**
+
    ```
    WiFi Settings → Find host's hotspot
    Enter password → Connect
    ```
 
 2. **Join Game**
+
    ```
    Open LAN Mafia app
    Enter name → "🔌 CONNECT TO NETWORK"
@@ -159,6 +171,7 @@ node server/hostServer.js
 ### **Alternative IP Addresses**
 
 If `192.168.43.1` doesn't work, try:
+
 - `192.168.1.1`
 - `10.0.0.1`
 - `172.20.10.1`
@@ -166,16 +179,19 @@ If `192.168.43.1` doesn't work, try:
 ## 📱 **Device-Specific Issues**
 
 ### **Android Host:**
+
 - Enable "Mobile Hotspot" in settings
 - Set hotspot password
 - Allow app network permissions
 
 ### **iOS Host:**
+
 - Enable "Personal Hotspot" in settings
 - Share hotspot password
 - Keep screen on during hosting
 
 ### **Windows Host:**
+
 - Use mobile hotspot feature
 - Or use USB tethering
 - Check Windows Defender firewall
@@ -183,6 +199,7 @@ If `192.168.43.1` doesn't work, try:
 ## 🎯 **Quick Fix Checklist**
 
 **Before Starting:**
+
 - [ ] Hotspot is ON
 - [ ] Password is shared
 - [ ] All devices connected to hotspot
@@ -190,6 +207,7 @@ If `192.168.43.1` doesn't work, try:
 - [ ] Players use correct IP
 
 **If Issues Persist:**
+
 - [ ] Restart all devices
 - [ ] Clear app cache
 - [ ] Try different IP address
@@ -199,14 +217,17 @@ If `192.168.43.1` doesn't work, try:
 ## 🆘 **Still Having Issues?**
 
 1. **Check Console Logs**
+
    - Host: Look at server console output
    - Players: Check app logs
 
 2. **Test Network**
+
    - Try pinging host IP
    - Check if port 3000 is open
 
 3. **Alternative Setup**
+
    - Use USB tethering instead of hotspot
    - Try different network configuration
 
@@ -217,4 +238,4 @@ If `192.168.43.1` doesn't work, try:
 
 ---
 
-**🎮 Happy Gaming! If you're still stuck, try the test script: `node test-server.js`** 
+**🎮 Happy Gaming! If you're still stuck, try the test script: `node test-server.js`**

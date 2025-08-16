@@ -14,17 +14,28 @@ class Logger {
     this.enableFileLogging = process.env.ENABLE_FILE_LOGGING === "true";
     this.logDir = path.join(__dirname, "..", "logs");
 
-    // Create logs directory if it doesn't exist
+    // Performance optimizations
+    this._timestampCache = null;
+    this._timestampCacheTime = 0;
+    this._logQueue = [];
+    this._isWriting = false;
+
     if (this.enableFileLogging && !fs.existsSync(this.logDir)) {
       fs.mkdirSync(this.logDir, { recursive: true });
     }
   }
 
   /**
-   * Get timestamp string
+   * Get timestamp string with caching for performance
    */
   getTimestamp() {
-    return new Date().toISOString();
+    const now = Date.now();
+    // Cache timestamp for 1 second to avoid frequent Date object creation
+    if (now - this._timestampCacheTime > 1000) {
+      this._timestampCache = new Date(now).toISOString();
+      this._timestampCacheTime = now;
+    }
+    return this._timestampCache;
   }
 
   /**
@@ -37,15 +48,45 @@ class Logger {
   }
 
   /**
-   * Write to file if enabled
+   * Write to file if enabled (async queued for better performance)
    */
   writeToFile(formattedMessage) {
     if (!this.enableFileLogging) return;
 
-    const filename = `server-${new Date().toISOString().split("T")[0]}.log`;
-    const filepath = path.join(this.logDir, filename);
+    this._logQueue.push(formattedMessage);
 
-    fs.appendFileSync(filepath, formattedMessage + "\n");
+    if (!this._isWriting) {
+      this._processLogQueue();
+    }
+  }
+
+  /**
+   * Process log queue asynchronously
+   */
+  async _processLogQueue() {
+    if (this._isWriting || this._logQueue.length === 0) return;
+
+    this._isWriting = true;
+
+    try {
+      const filename = `server-${new Date().toISOString().split("T")[0]}.log`;
+      const filepath = path.join(this.logDir, filename);
+
+      // Process multiple log entries at once for better performance
+      const messages = this._logQueue.splice(0, this._logQueue.length);
+      const content = messages.join("\n") + "\n";
+
+      await fs.promises.appendFile(filepath, content);
+    } catch (error) {
+      console.error("Failed to write log file:", error.message);
+    } finally {
+      this._isWriting = false;
+
+      // Process any new logs that arrived while writing
+      if (this._logQueue.length > 0) {
+        setImmediate(() => this._processLogQueue());
+      }
+    }
   }
 
   /**
@@ -75,7 +116,7 @@ class Logger {
     if (["error", "warn"].includes(this.logLevel)) return;
 
     const formatted = this.formatMessage("info", message, data);
-    console.log(`ℹ️ ${formatted}`);
+    console.log(`INFO: ${formatted}`);
     this.writeToFile(formatted);
   }
 
@@ -86,7 +127,7 @@ class Logger {
     if (this.logLevel !== "debug") return;
 
     const formatted = this.formatMessage("debug", message, data);
-    console.log(`🐛 ${formatted}`);
+    console.log(`DEBUG: ${formatted}`);
     this.writeToFile(formatted);
   }
 
@@ -95,7 +136,7 @@ class Logger {
    */
   game(message, data = null) {
     const formatted = this.formatMessage("game", message, data);
-    console.log(`🎮 ${formatted}`);
+    console.log(`GAME: ${formatted}`);
     this.writeToFile(formatted);
   }
 
@@ -104,7 +145,7 @@ class Logger {
    */
   player(message, data = null) {
     const formatted = this.formatMessage("player", message, data);
-    console.log(`👤 ${formatted}`);
+    console.log(`PLAYER: ${formatted}`);
     this.writeToFile(formatted);
   }
 
@@ -113,7 +154,7 @@ class Logger {
    */
   server(message, data = null) {
     const formatted = this.formatMessage("server", message, data);
-    console.log(`🖥️ ${formatted}`);
+    console.log(`SERVER: ${formatted}`);
     this.writeToFile(formatted);
   }
 }

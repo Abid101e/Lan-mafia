@@ -9,105 +9,106 @@
  * Used in Lobby, Voting, and Discussion screens.
  */
 
-import React from "react";
+import React, { useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
-const PlayerCard = ({
-  player,
-  isHost = false,
-  showRole = false,
-  isSelectable = false,
-  isSelected = false,
-  onPress = null,
-  onKick = null,
-  showReadyStatus = false,
-  isReady = false,
-  style = {},
-}) => {
-  const getStatusColor = () => {
-    if (!player.isConnected) return "#666666";
-    if (!player.isAlive) return "#ff4444";
-    return "#44ff44";
-  };
-
-  const getRoleColor = (role) => {
-    switch (role) {
-      case "killer":
-        return "#ff0000";
-      case "healer":
-        return "#00ff00";
-      case "police":
-        return "#0000ff";
-      case "townsperson":
-        return "#ffaa00";
-      default:
-        return "#ffffff";
-    }
-  };
-
-  const handlePress = () => {
-    if (isSelectable && onPress) {
-      onPress(player);
-    }
-  };
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.container,
-        isSelected && styles.selected,
-        !player.isConnected && styles.disconnected,
-        !player.isAlive && styles.dead,
-        style,
-      ]}
-      onPress={handlePress}
-      disabled={!isSelectable}
-      activeOpacity={isSelectable ? 0.7 : 1}
-    >
-      <View style={styles.header}>
-        <Text style={[styles.name, !player.isAlive && styles.deadText]}>
-          {player.name}
-          {isHost && " 👑"}
-        </Text>
-        <View
-          style={[styles.statusDot, { backgroundColor: getStatusColor() }]}
-        />
-      </View>
-
-      {showRole && player.role && (
-        <Text style={[styles.role, { color: getRoleColor(player.role) }]}>
-          {player.role.charAt(0).toUpperCase() + player.role.slice(1)}
-        </Text>
-      )}
-
-      <View style={styles.footer}>
-        <Text style={styles.status}>
-          {!player.isConnected
-            ? "Disconnected"
-            : !player.isAlive
-            ? "Eliminated"
-            : "Alive"}
-        </Text>
-
-        {showReadyStatus && !player.isHost && (
-          <View style={styles.readyContainer}>
-            <Text style={[styles.readyText, isReady && styles.readyActive]}>
-              {isReady ? "✅ Ready" : "⏳ Not Ready"}
-            </Text>
-          </View>
-        )}
-
-        {player.isHost && <Text style={styles.hostLabel}>HOST</Text>}
-
-        {onKick && !player.isHost && (
-          <TouchableOpacity style={styles.kickButton} onPress={onKick}>
-            <Text style={styles.kickButtonText}>❌</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+// Cache role colors to avoid repeated calculations
+const ROLE_COLORS = {
+  killer: "#ff0000",
+  healer: "#00ff00",
+  police: "#0000ff",
+  townsperson: "#ffaa00",
+  default: "#ffffff",
 };
+
+const PlayerCard = React.memo(
+  ({
+    player,
+    isHost = false,
+    showRole = false,
+    isSelectable = false,
+    isSelected = false,
+    onPress = null,
+    onKick = null,
+    showReadyStatus = false,
+    isReady = false,
+    style = {},
+  }) => {
+    // Memoize status color calculation
+    const statusColor = useMemo(() => {
+      if (!player.isConnected) return "#666666";
+      if (!player.isAlive) return "#ff4444";
+      return "#44ff44";
+    }, [player.isConnected, player.isAlive]);
+
+    // Memoize role color calculation
+    const roleColor = useMemo(() => {
+      return ROLE_COLORS[player.role] || ROLE_COLORS.default;
+    }, [player.role]);
+
+    // Memoize press handler to avoid recreation
+    const handlePress = useCallback(() => {
+      if (isSelectable && onPress) {
+        onPress(player);
+      }
+    }, [isSelectable, onPress, player]);
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.container,
+          isSelected && styles.selected,
+          !player.isConnected && styles.disconnected,
+          !player.isAlive && styles.dead,
+          style,
+        ]}
+        onPress={handlePress}
+        disabled={!isSelectable}
+        activeOpacity={isSelectable ? 0.7 : 1}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.name, !player.isAlive && styles.deadText]}>
+            {player.name}
+            {isHost && " 👑"}
+          </Text>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        </View>
+
+        {showRole && player.role && (
+          <Text style={[styles.role, { color: roleColor }]}>
+            {player.role.charAt(0).toUpperCase() + player.role.slice(1)}
+          </Text>
+        )}
+
+        <View style={styles.footer}>
+          <Text style={styles.status}>
+            {!player.isConnected
+              ? "Disconnected"
+              : !player.isAlive
+              ? "Eliminated"
+              : "Alive"}
+          </Text>
+
+          {showReadyStatus && !player.isHost && (
+            <View style={styles.readyContainer}>
+              <Text style={[styles.readyText, isReady && styles.readyActive]}>
+                {isReady ? "✅ Ready" : "⏳ Not Ready"}
+              </Text>
+            </View>
+          )}
+
+          {player.isHost && <Text style={styles.hostLabel}>HOST</Text>}
+
+          {onKick && !player.isHost && (
+            <TouchableOpacity style={styles.kickButton} onPress={onKick}>
+              <Text style={styles.kickButtonText}>❌</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {

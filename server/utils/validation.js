@@ -48,7 +48,6 @@ function validatePlayerName(name) {
     };
   }
 
-  // Check for valid characters (letters, numbers, spaces, basic symbols)
   if (!allowedChars.test(trimmedName)) {
     return {
       valid: false,
@@ -56,7 +55,6 @@ function validatePlayerName(name) {
     };
   }
 
-  // Check for inappropriate words (basic filter)
   const inappropriateWords = [
     "admin",
     "server",
@@ -88,13 +86,7 @@ function validatePlayerName(name) {
  * @returns {Object} Validation result
  */
 function validateGameSettings(settings) {
-  console.log("🔍 Starting validation...");
-  console.log("📥 Received settings:", JSON.stringify(settings, null, 2));
-  console.log("📊 Settings type:", typeof settings);
-  console.log("📋 Settings keys:", Object.keys(settings || {}));
-
   if (!settings || typeof settings !== "object") {
-    console.log("❌ Settings validation failed: not an object");
     return {
       valid: false,
       message: "Invalid settings format",
@@ -105,13 +97,11 @@ function validateGameSettings(settings) {
   let roles, timers, totalPlayers;
 
   if (settings.roles) {
-    console.log("🎭 Using nested format");
     // Nested format
     roles = settings.roles;
     timers = settings.timers || {};
     totalPlayers = settings.totalPlayers;
   } else {
-    console.log("📄 Using flat format (legacy)");
     // Flat format (legacy)
     roles = {
       killers: settings.killers,
@@ -127,13 +117,8 @@ function validateGameSettings(settings) {
     totalPlayers = settings.totalPlayers;
   }
 
-  console.log("🎭 Extracted roles:", JSON.stringify(roles, null, 2));
-  console.log("⏱️ Extracted timers:", JSON.stringify(timers, null, 2));
-  console.log("👥 Total players:", totalPlayers);
-
   // Check if roles object exists and has properties
   if (!roles || typeof roles !== "object") {
-    console.log("❌ Roles validation failed: roles not found or not an object");
     return {
       valid: false,
       message: "Invalid settings format - roles missing",
@@ -142,13 +127,11 @@ function validateGameSettings(settings) {
 
   // Validate total players (allowing 3 for testing)
   if (totalPlayers !== undefined) {
-    console.log("🔢 Validating total players:", totalPlayers);
     if (
       !Number.isInteger(totalPlayers) ||
       totalPlayers < 3 || // Changed from 4 to 3 for testing
       totalPlayers > 20
     ) {
-      console.log("❌ Total players validation failed");
       return {
         valid: false,
         message: "Total players must be between 3 and 20 (testing mode)",
@@ -156,71 +139,43 @@ function validateGameSettings(settings) {
     }
   }
 
-  // Validate roles
-  const { killers, healers, police, townspeople } = roles;
-  console.log(
-    "🔍 Individual roles - killers:",
-    killers,
-    "healers:",
-    healers,
-    "police:",
-    police,
-    "townspeople:",
-    townspeople
-  );
+  // Validate roles using helper function
+  const roleValidationRules = [
+    { name: "killers", value: roles.killers, min: 1, max: 5, required: true },
+    { name: "healers", value: roles.healers, min: 0, max: 3, required: false },
+    { name: "police", value: roles.police, min: 0, max: 2, required: false },
+    {
+      name: "townspeople",
+      value: roles.townspeople,
+      min: 0,
+      max: Infinity,
+      required: false,
+    },
+  ];
 
-  if (
-    killers !== undefined &&
-    (!Number.isInteger(killers) || killers < 1 || killers > 5)
-  ) {
-    console.log("❌ Killers validation failed:", killers);
-    return {
-      valid: false,
-      message: "Killers must be between 1 and 5",
-    };
-  }
-
-  if (
-    healers !== undefined &&
-    (!Number.isInteger(healers) || healers < 0 || healers > 3)
-  ) {
-    console.log("❌ Healers validation failed:", healers);
-    return {
-      valid: false,
-      message: "Healers must be between 0 and 3",
-    };
-  }
-
-  if (
-    police !== undefined &&
-    (!Number.isInteger(police) || police < 0 || police > 2)
-  ) {
-    console.log("❌ Police validation failed:", police);
-    return {
-      valid: false,
-      message: "Police must be between 0 and 2",
-    };
-  }
-
-  if (
-    townspeople !== undefined &&
-    (!Number.isInteger(townspeople) || townspeople < 0)
-  ) {
-    console.log("❌ Townspeople validation failed:", townspeople);
-    return {
-      valid: false,
-      message: "Townspeople count must be 0 or greater (testing mode allows 0)",
-    };
+  for (const rule of roleValidationRules) {
+    if (rule.value !== undefined) {
+      if (
+        !Number.isInteger(rule.value) ||
+        rule.value < rule.min ||
+        rule.value > rule.max
+      ) {
+        return {
+          valid: false,
+          message: `${
+            rule.name.charAt(0).toUpperCase() + rule.name.slice(1)
+          } must be between ${rule.min} and ${
+            rule.max === Infinity ? "unlimited" : rule.max
+          }`,
+        };
+      }
+    }
   }
 
   // Special case for 3-player testing: allow 0 townspeople
-  if (totalPlayers === 3 && townspeople === 0) {
-    console.log("⚠️ 3-player testing mode: allowing 0 townspeople");
-  } else if (townspeople !== undefined && townspeople < 1) {
-    console.log(
-      "❌ Townspeople validation failed for normal game:",
-      townspeople
-    );
+  if (totalPlayers === 3 && roles.townspeople === 0) {
+    // Allow 0 townspeople for 3-player testing
+  } else if (roles.townspeople !== undefined && roles.townspeople < 1) {
     return {
       valid: false,
       message:
@@ -228,53 +183,37 @@ function validateGameSettings(settings) {
     };
   }
 
-  console.log("✅ Roles validation passed");
-
   // Validate timers if they exist
   if (timers && typeof timers === "object") {
-    console.log("⏱️ Validating timers...");
-    const { nightTimer, discussionTimer, votingTimer, roleRevealTimer } =
-      timers;
+    const timerRules = [
+      { name: "nightTimer", value: timers.nightTimer, min: 15, max: 300 },
+      {
+        name: "discussionTimer",
+        value: timers.discussionTimer,
+        min: 30,
+        max: 600,
+      },
+      { name: "votingTimer", value: timers.votingTimer, min: 15, max: 300 },
+    ];
 
-    if (
-      nightTimer !== undefined &&
-      (!Number.isInteger(nightTimer) || nightTimer < 15 || nightTimer > 300)
-    ) {
-      console.log("❌ Night timer validation failed:", nightTimer);
-      return {
-        valid: false,
-        message: "Night timer must be between 15 and 300 seconds",
-      };
+    for (const timer of timerRules) {
+      if (
+        timer.value !== undefined &&
+        (!Number.isInteger(timer.value) ||
+          timer.value < timer.min ||
+          timer.value > timer.max)
+      ) {
+        return {
+          valid: false,
+          message: `${timer.name
+            .replace(/([A-Z])/g, " $1")
+            .toLowerCase()
+            .trim()} must be between ${timer.min} and ${timer.max} seconds`,
+        };
+      }
     }
-
-    if (
-      discussionTimer !== undefined &&
-      (!Number.isInteger(discussionTimer) ||
-        discussionTimer < 30 ||
-        discussionTimer > 600)
-    ) {
-      console.log("❌ Discussion timer validation failed:", discussionTimer);
-      return {
-        valid: false,
-        message: "Discussion timer must be between 30 and 600 seconds",
-      };
-    }
-
-    if (
-      votingTimer !== undefined &&
-      (!Number.isInteger(votingTimer) || votingTimer < 15 || votingTimer > 300)
-    ) {
-      console.log("❌ Voting timer validation failed:", votingTimer);
-      return {
-        valid: false,
-        message: "Voting timer must be between 15 and 300 seconds",
-      };
-    }
-
-    console.log("✅ Timers validation passed");
   }
 
-  console.log("✅ All validation passed successfully!");
   return {
     valid: true,
     message: "Game settings are valid",

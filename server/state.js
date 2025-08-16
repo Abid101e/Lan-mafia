@@ -1,5 +1,8 @@
 class GameState {
   constructor() {
+    // Initialize lookup caches for performance
+    this._playerSocketMap = new Map();
+    this._playerIdMap = new Map();
     this.reset();
   }
 
@@ -18,6 +21,10 @@ class GameState {
     this.roundNumber = 0;
     this.readyPlayers = []; // Track which players are ready
     this.discussionReadyPlayers = []; // Track which players are ready for voting
+
+    // Clear lookup caches
+    this._playerSocketMap.clear();
+    this._playerIdMap.clear();
   }
 
   // Player management
@@ -36,35 +43,45 @@ class GameState {
 
     this.players.push(player);
 
+    // Update lookup caches
+    this._playerSocketMap.set(socketId, player);
+    this._playerIdMap.set(player.id, player);
+
     if (isHost) {
       this.hostId = socketId;
     }
 
-    console.log(`➕ Added player: ${name} (${player.id})`);
     return player;
   }
 
   removePlayer(socketId) {
-    const playerIndex = this.players.findIndex((p) => p.socketId === socketId);
-    if (playerIndex !== -1) {
-      const player = this.players[playerIndex];
-      this.players.splice(playerIndex, 1);
+    const player = this._playerSocketMap.get(socketId);
+    if (player) {
+      const playerIndex = this.players.findIndex(
+        (p) => p.socketId === socketId
+      );
+      if (playerIndex !== -1) {
+        this.players.splice(playerIndex, 1);
+      }
+
+      // Remove from caches
+      this._playerSocketMap.delete(socketId);
+      this._playerIdMap.delete(player.id);
 
       // Clean up ready status
       this.readyPlayers = this.readyPlayers.filter((id) => id !== player.id);
 
-      console.log(`➖ Removed player: ${player.name}`);
       return player;
     }
     return null;
   }
 
   getPlayerBySocketId(socketId) {
-    return this.players.find((p) => p.socketId === socketId);
+    return this._playerSocketMap.get(socketId) || null;
   }
 
   getPlayerById(playerId) {
-    return this.players.find((p) => p.id === playerId);
+    return this._playerIdMap.get(playerId) || null;
   }
 
   getPlayers() {
@@ -83,7 +100,6 @@ class GameState {
     const player = this.getPlayerBySocketId(socketId);
     if (player) {
       player.isConnected = false;
-      console.log(`🔌 Marked ${player.name} as disconnected`);
     }
   }
 
@@ -91,14 +107,12 @@ class GameState {
     const player = this.getPlayerById(playerId);
     if (player) {
       player.isAlive = false;
-      console.log(`💀 ${player.name} was eliminated`);
     }
   }
 
   // Host management
   setHost(socketId, name) {
     this.hostId = socketId;
-    console.log(`👑 ${name} is now the host`);
   }
 
   isHost(socketId) {
@@ -106,7 +120,7 @@ class GameState {
   }
 
   getHost() {
-    return this.players.find((p) => p.socketId === this.hostId);
+    return this.getPlayerBySocketId(this.hostId);
   }
 
   // Ready status management
@@ -117,7 +131,6 @@ class GameState {
       if (!this.readyPlayers.includes(player.id)) {
         this.readyPlayers.push(player.id);
       }
-      console.log(`✅ Player ${player.name} is ready`);
     }
   }
 
@@ -126,7 +139,6 @@ class GameState {
     if (player && !player.isHost) {
       player.isReady = false;
       this.readyPlayers = this.readyPlayers.filter((id) => id !== player.id);
-      console.log(`⏳ Player ${player.name} is not ready`);
     }
   }
 
@@ -142,7 +154,6 @@ class GameState {
   // Game code management
   setGameCode(code) {
     this.gameCode = code;
-    console.log(`🎯 Game code set: ${code}`);
   }
 
   getGameCode() {
@@ -151,7 +162,6 @@ class GameState {
 
   // Game phase management
   setPhase(phase) {
-    console.log(`🎮 Game phase changed: ${this.currentPhase} → ${phase}`);
     this.currentPhase = phase;
 
     if (phase === "night" || phase === "discussion" || phase === "voting") {
@@ -184,8 +194,6 @@ class GameState {
         player.role = assignment.role;
       }
     });
-
-    console.log("🎭 Role assignments set");
   }
 
   getRoleAssignments() {
@@ -194,12 +202,14 @@ class GameState {
 
   // Night actions management
   addNightAction(action) {
-    // Remove any existing action from this player
-    this.nightActions = this.nightActions.filter(
-      (a) => a.playerId !== action.playerId
+    // Remove existing action from same player efficiently
+    const existingIndex = this.nightActions.findIndex(
+      (a) => a.playerId === action.playerId
     );
+    if (existingIndex !== -1) {
+      this.nightActions.splice(existingIndex, 1);
+    }
 
-    // Add new action
     this.nightActions.push({
       ...action,
       timestamp: new Date(),
@@ -216,22 +226,21 @@ class GameState {
 
   clearNightActions() {
     this.nightActions = [];
-    console.log("🌙 Night actions cleared");
   }
 
   // Voting management
   addVote(playerId, targetId) {
-    // Remove any existing vote from this player
-    this.votes = this.votes.filter((v) => v.playerId !== playerId);
+    // Remove existing vote from same player efficiently
+    const existingIndex = this.votes.findIndex((v) => v.playerId === playerId);
+    if (existingIndex !== -1) {
+      this.votes.splice(existingIndex, 1);
+    }
 
-    // Add new vote
     this.votes.push({
       playerId,
       targetId,
       timestamp: new Date(),
     });
-
-    console.log(`🗳️ Vote recorded: ${playerId} → ${targetId}`);
   }
 
   getVotes() {
@@ -240,13 +249,11 @@ class GameState {
 
   clearVotes() {
     this.votes = [];
-    console.log("🗳️ Votes cleared");
   }
 
   // Round management
   nextRound() {
     this.roundNumber++;
-    console.log(`🔄 Round ${this.roundNumber} started`);
   }
 
   getRoundNumber() {
@@ -266,9 +273,6 @@ class GameState {
 
   // Reset specific to new game (keeps players)
   resetGame() {
-    console.log("🔄 Resetting game state");
-
-    // Reset player states but keep connections
     this.players.forEach((player) => {
       player.isAlive = true;
       player.role = null;

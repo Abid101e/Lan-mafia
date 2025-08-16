@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,145 +12,183 @@ import {
 } from "react-native";
 import { socket } from "../utils/socket";
 
-const { width } = Dimensions.get("window");
+// Cache dimensions
+const screenDimensions = Dimensions.get("window");
+const { width } = screenDimensions;
 
-export default function JoinGameScreen({ navigation }) {
+export default React.memo(function JoinGameScreen({ navigation }) {
   const [playerName, setPlayerName] = useState("");
   const [availableGames, setAvailableGames] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isScanning, setIsScanning] = useState(true);
 
+  // Memoize socket event handlers to prevent recreation on each render
+  const handleGameListUpdated = useCallback((games) => {
+    console.log("Received games list:", games);
+    setAvailableGames(games);
+    setIsScanning(false);
+    setIsRefreshing(false);
+  }, []);
+
+  const handleJoinError = useCallback((error) => {
+    Alert.alert("Join Error", error.message);
+  }, []);
+
+  const scanForGames = useCallback(() => {
+    setIsScanning(true);
+    socket.scanForGames();
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    scanForGames();
+  }, [scanForGames]);
+
   useEffect(() => {
     // Scan for available games when screen loads
     scanForGames();
 
-    // Set up socket listeners
-    socket.on("gameListUpdated", (games) => {
-      console.log("Received games list:", games);
-      setAvailableGames(games);
-      setIsScanning(false);
-      setIsRefreshing(false);
-    });
+    // Set up socket listeners using memoized handlers
+    socket.on("gameListUpdated", handleGameListUpdated);
 
     socket.on("joinedGame", (gameData) => {
       console.log("Old joinedGame listener triggered - this should not happen");
       // This listener is now handled in handleJoinGame function
     });
 
-    socket.on("joinError", (error) => {
-      Alert.alert("Join Error", error.message);
-    });
+    socket.on("joinError", handleJoinError);
 
     return () => {
-      socket.off("gameListUpdated");
+      socket.off("gameListUpdated", handleGameListUpdated);
       socket.off("joinedGame");
-      socket.off("joinError");
+      socket.off("joinError", handleJoinError);
     };
-  }, []);
+  }, [scanForGames, handleGameListUpdated, handleJoinError]);
 
-  const scanForGames = () => {
-    setIsScanning(true);
-    // Use the new discovery system
-    socket.scanForGames();
-  };
+  const handleJoinGame = useCallback(
+    async (game) => {
+      if (!playerName.trim()) {
+        Alert.alert("Error", "Please enter your name first");
+        return;
+      }
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    scanForGames();
-  };
+      try {
+        // Connect to the game host
+        socket.connect(game.hostIP);
 
-  const handleJoinGame = async (game) => {
-    if (!playerName.trim()) {
-      Alert.alert("Error", "Please enter your name first");
-      return;
-    }
+        // Wait for connection to be established
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Connection timeout"));
+          }, 5000);
 
-    try {
-      // Connect to the game host
-      socket.connect(game.hostIP);
+          const handleConnect = () => {
+            clearTimeout(timeout);
+            console.log("Connected to host, now joining game...");
 
-      // Wait for connection to be established
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Connection timeout"));
-        }, 5000);
-
-        const handleConnect = () => {
-          clearTimeout(timeout);
-          console.log("Connected to host, now joining game...");
-
-          // Set up listener for join response
-          socket.socket.on("joinedGame", (gameData) => {
-            console.log("Successfully joined game:", gameData);
-            console.log("About to navigate to Lobby with params:", {
-              isHost: false,
-              gameCode: gameData.gameCode,
-              playerId: gameData.playerId,
-            });
-
-            // Navigate to the same lobby screen as the host
-            try {
-              navigation.navigate("HostLobby", {
+            // Set up listener for join response
+            socket.socket.on("joinedGame", (gameData) => {
+              console.log("Successfully joined game:", gameData);
+              console.log("About to navigate to Lobby with params:", {
                 isHost: false,
                 gameCode: gameData.gameCode,
                 playerId: gameData.playerId,
-                hostName: "", // Will be populated from server data
               });
-              console.log("Navigation called successfully");
-            } catch (error) {
-              console.error("Navigation error:", error);
-            }
+
+              // Navigate to the same lobby screen as the host
+              try {
+                navigation.navigate("HostLobby", {
+                  isHost: false,
+                  gameCode: gameData.gameCode,
+                  playerId: gameData.playerId,
+                  hostName: "", // Will be populated from server data
+                });
+                console.log("Navigation called successfully");
+              } catch (error) {
+                console.error("Navigation error:", error);
+              }
+            });
+
+            socket.socket.on("error", (error) => {
+              console.error("Join game error:", error);
+              Alert.alert("Error", error.message || "Failed to join game");
+            });
+
+            resolve();
+          };
+
+          socket.socket.on("connect", handleConnect);
+
+          socket.socket.on("connect_error", (error) => {
+            clearTimeout(timeout);
+            reject(error);
           });
-
-          socket.socket.on("error", (error) => {
-            console.error("Join game error:", error);
-            Alert.alert("Error", error.message || "Failed to join game");
-          });
-
-          resolve();
-        };
-
-        socket.socket.on("connect", handleConnect);
-
-        socket.socket.on("connect_error", (error) => {
-          clearTimeout(timeout);
-          reject(error);
         });
-      });
 
-      // Now join the game using the established connection
-      socket.socket.emit("joinGameByCode", {
-        gameCode: game.gameCode,
-        playerName: playerName.trim(),
-      });
+        // Now join the game using the established connection
+        socket.socket.emit("joinGameByCode", {
+          gameCode: game.gameCode,
+          playerName: playerName.trim(),
+        });
 
-      console.log(`Sent join request for game ${game.gameCode}`);
-    } catch (error) {
-      console.error("Failed to join game:", error);
-      Alert.alert("Connection Error", "Could not connect to the game host.");
-    }
-  };
+        console.log(`Sent join request for game ${game.gameCode}`);
+      } catch (error) {
+        console.error("Failed to join game:", error);
+        Alert.alert("Connection Error", "Could not connect to the game host.");
+      }
+    },
+    [playerName, navigation]
+  );
 
-  const renderGameItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.gameCard}
-      onPress={() => handleJoinGame(item)}
-    >
-      <View style={styles.gameHeader}>
-        <Text style={styles.gameName}>{item.hostName}'s Game</Text>
-        <Text style={styles.gameCode}>#{item.gameCode}</Text>
-      </View>
-      <View style={styles.gameInfo}>
-        <Text style={styles.playerCount}>
-          👥 {item.playerCount}/{item.maxPlayers} players
-        </Text>
-        <Text style={styles.gameStatus}>
-          {item.status === "waiting"
-            ? "🟢 Waiting for players"
-            : "🔴 In progress"}
-        </Text>
-      </View>
-    </TouchableOpacity>
+  const renderGameItem = useCallback(
+    ({ item }) => (
+      <TouchableOpacity
+        style={styles.gameCard}
+        onPress={() => handleJoinGame(item)}
+      >
+        <View style={styles.gameHeader}>
+          <Text style={styles.gameName}>{item.hostName}'s Game</Text>
+          <Text style={styles.gameCode}>#{item.gameCode}</Text>
+        </View>
+        <View style={styles.gameInfo}>
+          <Text style={styles.playerCount}>
+            👥 {item.playerCount}/{item.maxPlayers} players
+          </Text>
+          <Text style={styles.gameStatus}>
+            {item.status === "waiting"
+              ? "🟢 Waiting for players"
+              : "🔴 In progress"}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    ),
+    [handleJoinGame]
+  );
+
+  // Memoize FlatList props for better performance
+  const flatListProps = useMemo(
+    () => ({
+      data: availableGames,
+      renderItem: renderGameItem,
+      keyExtractor: (item) => item.gameCode,
+      style: styles.gamesList,
+      refreshControl: (
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#007AFF"
+        />
+      ),
+      getItemLayout: (data, index) => ({
+        length: 120, // Estimated item height
+        offset: 120 * index,
+        index,
+      }),
+      removeClippedSubviews: true,
+      maxToRenderPerBatch: 10,
+      windowSize: 10,
+    }),
+    [availableGames, renderGameItem, isRefreshing, handleRefresh]
   );
 
   return (
@@ -206,24 +244,12 @@ export default function JoinGameScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : (
-          <FlatList
-            data={availableGames}
-            renderItem={renderGameItem}
-            keyExtractor={(item) => item.gameCode}
-            style={styles.gamesList}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor="#007AFF"
-              />
-            }
-          />
+          <FlatList {...flatListProps} />
         )}
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

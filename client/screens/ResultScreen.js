@@ -26,8 +26,12 @@ export default function ResultScreen({ navigation }) {
       useNativeDriver: true,
     }).start();
 
-    socket.on("roundResults", setResults);
+    socket.on("roundResults", (data) => {
+      console.log("📊 ResultScreen received roundResults:", data);
+      setResults(data);
+    });
     socket.on("gamePhaseChanged", (phase) => {
+      console.log("📊 ResultScreen: Phase changed to:", phase);
       if (phase === "night") {
         navigation.navigate("NightPhase");
       } else if (phase === "discussion") {

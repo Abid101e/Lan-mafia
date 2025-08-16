@@ -10,7 +10,9 @@
     "simulate": "node -e \"require('./utils/testing').simulateGame()\"",
     "validate": "node -e \"const config = require('./config'); config.initialize(); console.log('✅ Configuration valid')\"",
     "logs": "tail -f logs/server-$(date +%Y-%m-%d).log 2>/dev/null || echo 'No log file found'",
-    "clean": "rm -rf logs/* 2>/dev/null || echo 'No logs to clean'"
+    "clean": "rm -rf logs/* 2>/dev/null || echo 'No logs to clean'",
+    "cleanup-ports": "node cleanup-ports.js",
+    "force-start": "npm run cleanup-ports && npm start"
   },
   "dependencies": {
     "express": "^4.18.2",

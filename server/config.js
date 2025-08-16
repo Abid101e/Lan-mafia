@@ -109,12 +109,20 @@ const config = {
   },
 };
 
+// Configuration cache for performance
+const configCache = new Map();
+
 /**
  * Get configuration value by path
  * @param {string} path - Dot notation path (e.g., 'server.port')
  * @returns {*} Configuration value
  */
 function get(path) {
+  // Check cache first
+  if (configCache.has(path)) {
+    return configCache.get(path);
+  }
+
   const keys = path.split(".");
   let value = config;
 
@@ -124,6 +132,11 @@ function get(path) {
     } else {
       return undefined;
     }
+  }
+
+  // Cache the result for frequently accessed paths
+  if (value !== undefined) {
+    configCache.set(path, value);
   }
 
   return value;
@@ -147,6 +160,16 @@ function set(path, value) {
   }
 
   obj[lastKey] = value;
+
+  // Invalidate cache for this path and any parent paths
+  configCache.delete(path);
+
+  // Also invalidate any cached paths that start with this path
+  for (const cachedPath of configCache.keys()) {
+    if (cachedPath.startsWith(path + ".")) {
+      configCache.delete(cachedPath);
+    }
+  }
 }
 
 /**

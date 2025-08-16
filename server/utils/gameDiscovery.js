@@ -19,27 +19,40 @@ class GameDiscoveryService extends EventEmitter {
     this.gameInfo = null;
     this.isHosting = false;
     this.heartbeatInterval = null;
+
+    // Performance optimizations
+    this._localIPCache = null;
+    this._localIPCacheTime = 0;
+    this._responseBuffer = null;
   }
 
   /**
-   * Get local IP address
+   * Get local IP address with caching
    */
   getLocalIP() {
-    const interfaces = os.networkInterfaces();
-    for (const devName in interfaces) {
-      const iface = interfaces[devName];
-      for (let i = 0; i < iface.length; i++) {
-        const alias = iface[i];
-        if (
-          alias.family === "IPv4" &&
-          alias.address !== "127.0.0.1" &&
-          !alias.internal
-        ) {
-          return alias.address;
+    const now = Date.now();
+    // Cache IP for 30 seconds to avoid repeated network interface lookups
+    if (now - this._localIPCacheTime > 30000) {
+      const interfaces = os.networkInterfaces();
+      for (const devName in interfaces) {
+        const iface = interfaces[devName];
+        for (let i = 0; i < iface.length; i++) {
+          const alias = iface[i];
+          if (
+            alias.family === "IPv4" &&
+            alias.address !== "127.0.0.1" &&
+            !alias.internal
+          ) {
+            this._localIPCache = alias.address;
+            this._localIPCacheTime = now;
+            return this._localIPCache;
+          }
         }
       }
+      this._localIPCache = "127.0.0.1";
+      this._localIPCacheTime = now;
     }
-    return "127.0.0.1";
+    return this._localIPCache;
   }
 
   /**
@@ -59,21 +72,35 @@ class GameDiscoveryService extends EventEmitter {
 
     this.isHosting = true;
 
+    // Pre-build response buffer for better performance
+    this._updateResponseBuffer();
+
     // Start UDP server for responding to discovery requests
     this.server = dgram.createSocket("udp4");
+
+    this.server.on("error", (err) => {
+      console.error("🚨 Game discovery server error:", err.message);
+      if (err.code === "EADDRINUSE") {
+        console.log(
+          `⚠️  Port ${this.discoveryPort} is already in use. Trying alternative port...`
+        );
+        // Try alternative port
+        this.discoveryPort = this.discoveryPort + 1;
+        setTimeout(() => {
+          this.startHosting(gameInfo);
+        }, 1000);
+        return;
+      }
+      // For other errors, stop hosting
+      this.stopHosting();
+    });
 
     this.server.on("message", (msg, rinfo) => {
       try {
         const request = JSON.parse(msg.toString());
-        if (request.type === "DISCOVER_GAMES") {
-          // Respond with game info
-          const response = {
-            type: "GAME_AVAILABLE",
-            game: this.gameInfo,
-          };
-
-          const responseMsg = Buffer.from(JSON.stringify(response));
-          this.server.send(responseMsg, rinfo.port, rinfo.address);
+        if (request.type === "DISCOVER_GAMES" && this._responseBuffer) {
+          // Send pre-built response for better performance
+          this.server.send(this._responseBuffer, rinfo.port, rinfo.address);
         }
       } catch (error) {
         console.log("Discovery request error:", error.message);
@@ -94,11 +121,26 @@ class GameDiscoveryService extends EventEmitter {
   }
 
   /**
+   * Update response buffer for optimized sending
+   */
+  _updateResponseBuffer() {
+    if (this.gameInfo) {
+      const response = {
+        type: "GAME_AVAILABLE",
+        game: this.gameInfo,
+      };
+      this._responseBuffer = Buffer.from(JSON.stringify(response));
+    }
+  }
+
+  /**
    * Update game info (player count, status, etc.)
    */
   updateGameInfo(updates) {
     if (this.gameInfo) {
       this.gameInfo = { ...this.gameInfo, ...updates, timestamp: Date.now() };
+      // Update response buffer when game info changes
+      this._updateResponseBuffer();
     }
   }
 
@@ -118,6 +160,12 @@ class GameDiscoveryService extends EventEmitter {
    */
   broadcastGameAvailable() {
     const client = dgram.createSocket("udp4");
+
+    client.on("error", (err) => {
+      console.log("Broadcast client error:", err.message);
+      client.close();
+    });
+
     client.bind(() => {
       client.setBroadcast(true);
 

@@ -65,6 +65,11 @@ export class GamePhaseManager {
     this.onPhaseChange = null;
     this.onTimeUpdate = null;
     this.gameSettings = {};
+
+    // Performance optimizations
+    this._phaseCache = new Map();
+    this._timerIds = new Set();
+    this._settingsCache = new Map();
   }
 
   /**

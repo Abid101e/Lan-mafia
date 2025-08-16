@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,9 +12,11 @@ import {
 import { socket } from "../utils/socket";
 import PlayerCard from "../components/PlayerCard";
 
-const { width } = Dimensions.get("window");
+// Cache dimensions
+const screenDimensions = Dimensions.get("window");
+const { width } = screenDimensions;
 
-export default function HostLobbyScreen({ navigation, route }) {
+export default React.memo(function HostLobbyScreen({ navigation, route }) {
   const [hostName, setHostName] = useState("");
   const [players, setPlayers] = useState([]);
 
@@ -26,6 +28,7 @@ export default function HostLobbyScreen({ navigation, route }) {
       players.map((p) => p.name)
     );
   }, [players]);
+
   const [gameCode, setGameCode] = useState(route?.params?.gameCode || "");
   const [isConnecting, setIsConnecting] = useState(false);
   const [gameCreated, setGameCreated] = useState(!!route?.params?.gameCode); // If gameCode exists, game is already created
@@ -164,7 +167,7 @@ export default function HostLobbyScreen({ navigation, route }) {
 
     socket.socket.on("gameStarted", (data) => {
       console.log("🎮 Game started event received:", data);
-      navigation.navigate("RoleReveal");
+      navigation.navigate("NightPhase");
     });
 
     socket.socket.on("playerJoined", (player) => {
@@ -433,7 +436,7 @@ export default function HostLobbyScreen({ navigation, route }) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

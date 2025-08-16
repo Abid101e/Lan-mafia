@@ -23,6 +23,7 @@ const cors = require("cors");
 const { Server } = require("socket.io");
 const { setupSocketEvents } = require("./socketEvents");
 const gameState = require("./state");
+const gameDiscovery = require("./utils/gameDiscovery");
 const logger = require("./utils/logger");
 const {
   sendErrorResponse,
@@ -183,6 +184,9 @@ server.listen(PORT, HOST, () => {
 // Graceful shutdown handling
 process.on("SIGINT", () => {
   logger.server("Shutting down LAN Mafia server...");
+
+  // Stop game discovery service to free UDP ports
+  gameDiscovery.stopHosting();
 
   // Notify all connected clients
   io.emit("serverShutdown", { message: "Server is shutting down" });

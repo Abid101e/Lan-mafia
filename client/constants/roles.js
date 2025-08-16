@@ -25,6 +25,9 @@ export const ROLE_TYPES = {
   TOWNSPERSON: "townsperson",
 };
 
+// Cache role data for better performance
+const roleCache = new Map();
+
 export const ROLES = {
   [ROLE_TYPES.KILLER]: {
     name: "Killer",
@@ -119,29 +122,43 @@ export const DEFAULT_GAME_CONFIG = {
 };
 
 /**
- * Get role information by type
+ * Get role information by type with caching
  * @param {string} roleType - Role type from ROLE_TYPES
  * @returns {object} Role configuration object
  */
 export function getRoleInfo(roleType) {
-  return ROLES[roleType] || ROLES[ROLE_TYPES.TOWNSPERSON];
+  if (!roleCache.has(roleType)) {
+    roleCache.set(roleType, ROLES[roleType] || ROLES[ROLE_TYPES.TOWNSPERSON]);
+  }
+  return roleCache.get(roleType);
 }
 
 /**
- * Get all roles for a specific team
+ * Get all roles for a specific team with caching
  * @param {string} team - Team name ('mafia' or 'town')
  * @returns {array} Array of role types
  */
 export function getRolesByTeam(team) {
-  return Object.keys(ROLES).filter((roleType) => ROLES[roleType].team === team);
+  const cacheKey = `team_${team}`;
+  if (!roleCache.has(cacheKey)) {
+    const roles = Object.keys(ROLES).filter(
+      (roleType) => ROLES[roleType].team === team
+    );
+    roleCache.set(cacheKey, roles);
+  }
+  return roleCache.get(cacheKey);
 }
 
 /**
- * Check if a role can perform night actions
+ * Check if a role can perform night actions with caching
  * @param {string} roleType - Role type from ROLE_TYPES
  * @returns {boolean} True if role can act at night
  */
 export function canRoleAct(roleType) {
-  const role = getRoleInfo(roleType);
-  return role.canAct;
+  const cacheKey = `canAct_${roleType}`;
+  if (!roleCache.has(cacheKey)) {
+    const role = getRoleInfo(roleType);
+    roleCache.set(cacheKey, role.canAct || false);
+  }
+  return roleCache.get(cacheKey);
 }

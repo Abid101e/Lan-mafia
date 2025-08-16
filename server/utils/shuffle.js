@@ -16,15 +16,10 @@
  * @returns {Array} New shuffled array (original is not modified)
  */
 function shuffle(array) {
-  // Create a copy to avoid modifying the original array
   const shuffled = [...array];
 
-  // Fisher-Yates shuffle
   for (let i = shuffled.length - 1; i > 0; i--) {
-    // Generate random index from 0 to i
     const j = Math.floor(Math.random() * (i + 1));
-
-    // Swap elements at positions i and j
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
@@ -83,13 +78,9 @@ function weightedRandom(items, weights) {
     throw new Error("Items and weights arrays must have the same length");
   }
 
-  // Calculate total weight
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-
-  // Generate random number between 0 and totalWeight
   let random = Math.random() * totalWeight;
 
-  // Find the selected item
   for (let i = 0; i < items.length; i++) {
     random -= weights[i];
     if (random <= 0) {
@@ -97,7 +88,6 @@ function weightedRandom(items, weights) {
     }
   }
 
-  // Fallback (should not reach here)
   return items[items.length - 1];
 }
 

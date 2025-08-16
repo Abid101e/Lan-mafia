@@ -1,7 +1,8 @@
 /**
  * Core Game Logic for LAN Mafia
  *
- * Contains all the game mechanics, role assignments, action processing,
+ * Containfunction processNightActions(actions) {
+  const results = {l the game mechanics, role assignments, action processing,
  * and win condition checking logic.
  */
 /**
@@ -23,8 +24,6 @@ const { buildRoleList } = require("./utils/roleBuilder");
  * @returns {Array} Role assignments for each player
  */
 function assignRoles(players, settings) {
-  console.log("🎭 Assigning roles to players");
-
   // Build role list based on settings
   const roles = buildRoleList(settings);
 
@@ -82,12 +81,13 @@ function processNightActions(actions, players) {
     }
   });
 
-  // Process investigations
+  // Process investigations using Map for better performance
+  const playerMap = new Map(players.map((p) => [p.id, p]));
+
   investigations.forEach((investigation) => {
-    const targetPlayer = players.find((p) => p.id === investigation.target);
-    const investigatorPlayer = players.find(
-      (p) => p.id === investigation.playerId
-    );
+    const targetPlayer = playerMap.get(investigation.target);
+    const investigatorPlayer = playerMap.get(investigation.playerId);
+
     if (targetPlayer && investigatorPlayer) {
       results.investigations.push({
         investigator: investigation.playerId,
@@ -121,7 +121,6 @@ function processNightActions(actions, players) {
     }
   }
 
-  console.log("🌙 Night results:", results);
   return results;
 }
 
@@ -132,19 +131,28 @@ function processNightActions(actions, players) {
  * @returns {Object} Voting results
  */
 function processVotes(votes, players) {
-  console.log("🗳️ Processing votes:", votes);
+  if (!votes || votes.length === 0) {
+    return {
+      eliminated: null,
+      voteCounts: {},
+      topCandidates: [],
+      message: "No votes were cast.",
+      maxVotes: 0,
+    };
+  }
 
-  // Count votes for each target
-  const voteCounts = {};
-  votes.forEach((vote) => {
-    voteCounts[vote.targetId] = (voteCounts[vote.targetId] || 0) + 1;
-  });
+  // Count votes more efficiently
+  const voteCounts = votes.reduce((counts, vote) => {
+    counts[vote.targetId] = (counts[vote.targetId] || 0) + 1;
+    return counts;
+  }, {});
 
-  // Find player(s) with most votes
-  const maxVotes = Math.max(...Object.values(voteCounts));
-  const topCandidates = Object.keys(voteCounts).filter(
-    (playerId) => voteCounts[playerId] === maxVotes
-  );
+  // Find maximum votes and candidates efficiently
+  const entries = Object.entries(voteCounts);
+  const maxVotes = Math.max(...entries.map(([, count]) => count));
+  const topCandidates = entries
+    .filter(([, count]) => count === maxVotes)
+    .map(([playerId]) => playerId);
 
   let eliminated = null;
   let message = "";
@@ -169,7 +177,6 @@ function processVotes(votes, players) {
     maxVotes,
   };
 
-  console.log("🗳️ Vote results:", results);
   return results;
 }
 

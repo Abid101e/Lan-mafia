@@ -9,128 +9,164 @@
  * Shows remaining time visually and numerically.
  */
 
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { View, Text, StyleSheet, Animated } from "react-native";
 
-const TimerBar = ({
-  duration = 60, // Duration in seconds
-  onTimeUp = null,
-  isActive = true,
-  showText = true,
-  color = "#00aaff",
-  warningColor = "#ffaa00",
-  dangerColor = "#ff4444",
-  style = {},
-  label = "Time Remaining",
-}) => {
-  const [timeLeft, setTimeLeft] = useState(duration);
-  const [animatedWidth] = useState(new Animated.Value(100));
-  const [isWarning, setIsWarning] = useState(false);
-  const [isDanger, setIsDanger] = useState(false);
+const TimerBar = React.memo(
+  ({
+    duration = 60, // Duration in seconds
+    timeLeft = null, // Time left from server (takes priority over internal timer)
+    onTimeUp = null,
+    isActive = true,
+    showText = true,
+    color = "#00aaff",
+    warningColor = "#ffaa00",
+    dangerColor = "#ff4444",
+    style = {},
+    label = "Time Remaining",
+  }) => {
+    const [internalTimeLeft, setInternalTimeLeft] = useState(duration);
+    const [animatedWidth] = useState(new Animated.Value(100));
+    const [isWarning, setIsWarning] = useState(false);
+    const [isDanger, setIsDanger] = useState(false);
 
-  useEffect(() => {
-    setTimeLeft(duration);
-    animatedWidth.setValue(100);
-    setIsWarning(false);
-    setIsDanger(false);
-  }, [duration]);
+    // Use ref to avoid stale closure issues
+    const intervalRef = useRef(null);
 
-  useEffect(() => {
-    let interval = null;
+    // Use server timeLeft if provided, otherwise use internal timer
+    const currentTimeLeft = timeLeft !== null ? timeLeft : internalTimeLeft;
 
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          const newTime = prevTime - 1;
-          const percentage = (newTime / duration) * 100;
+    // Memoize threshold calculations
+    const thresholds = useMemo(
+      () => ({
+        danger: duration * 0.2,
+        warning: duration * 0.4,
+      }),
+      [duration]
+    );
 
-          // Update progress bar
-          Animated.timing(animatedWidth, {
-            toValue: percentage,
-            duration: 500,
-            useNativeDriver: false,
-          }).start();
+    // Memoize color calculation
+    const currentColor = useMemo(() => {
+      if (isDanger) return dangerColor;
+      if (isWarning) return warningColor;
+      return color;
+    }, [isDanger, isWarning, dangerColor, warningColor, color]);
 
-          // Update warning states
-          if (newTime <= duration * 0.2) {
-            // Last 20%
-            setIsDanger(true);
-            setIsWarning(false);
-          } else if (newTime <= duration * 0.4) {
-            // Last 40%
-            setIsWarning(true);
-            setIsDanger(false);
-          } else {
-            setIsWarning(false);
-            setIsDanger(false);
-          }
+    // Memoize time formatting
+    const formattedTime = useMemo(() => {
+      const minutes = Math.floor(currentTimeLeft / 60);
+      const seconds = currentTimeLeft % 60;
+      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    }, [currentTimeLeft]);
 
-          if (newTime <= 0 && onTimeUp) {
-            onTimeUp();
-          }
+    const handleTimeUp = useCallback(() => {
+      if (onTimeUp) onTimeUp();
+    }, [onTimeUp]);
 
-          return newTime;
-        });
-      }, 1000);
-    }
+    // Update internal timer when duration changes (only if not using server timeLeft)
+    useEffect(() => {
+      if (timeLeft === null) {
+        setInternalTimeLeft(duration);
+        animatedWidth.setValue(100);
+        setIsWarning(false);
+        setIsDanger(false);
+      }
+    }, [duration, animatedWidth, timeLeft]);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isActive, timeLeft, duration, onTimeUp, animatedWidth]);
+    // Update progress bar and warning states when time changes
+    useEffect(() => {
+      const percentage = (currentTimeLeft / duration) * 100;
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+      // Update progress bar with optimized animation
+      Animated.timing(animatedWidth, {
+        toValue: percentage,
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
 
-  const getBarColor = () => {
-    if (isDanger) return dangerColor;
-    if (isWarning) return warningColor;
-    return color;
-  };
+      // Update warning states using memoized thresholds
+      if (currentTimeLeft <= thresholds.danger) {
+        setIsDanger(true);
+        setIsWarning(false);
+      } else if (currentTimeLeft <= thresholds.warning) {
+        setIsWarning(true);
+        setIsDanger(false);
+      } else {
+        setIsWarning(false);
+        setIsDanger(false);
+      }
 
-  const getTextColor = () => {
-    if (isDanger) return dangerColor;
-    if (isWarning) return warningColor;
-    return "#ffffff";
-  };
+      if (currentTimeLeft <= 0) {
+        handleTimeUp();
+      }
+    }, [currentTimeLeft, duration, animatedWidth, thresholds, handleTimeUp]);
 
-  return (
-    <View style={[styles.container, style]}>
-      {showText && (
-        <View style={styles.textContainer}>
-          <Text style={styles.label}>{label}</Text>
-          <Text style={[styles.timeText, { color: getTextColor() }]}>
-            {formatTime(timeLeft)}
-          </Text>
+    // Internal timer (only runs if not using server timeLeft)
+    useEffect(() => {
+      if (timeLeft === null && isActive && internalTimeLeft > 0) {
+        intervalRef.current = setInterval(() => {
+          setInternalTimeLeft((prevTime) => {
+            const newTime = prevTime - 1;
+            return newTime;
+          });
+        }, 1000);
+      } else {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      }
+
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      };
+    }, [isActive, internalTimeLeft, timeLeft]);
+
+    return (
+      <View style={[styles.container, style]}>
+        {showText && (
+          <View style={styles.textContainer}>
+            <Text style={styles.label}>{label}</Text>
+            <Text style={[styles.timeText, { color: currentColor }]}>
+              {formattedTime}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.progressContainer}>
+          <View
+            style={[styles.progressBackground, { borderColor: currentColor }]}
+          >
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  backgroundColor: currentColor,
+                  width: animatedWidth.interpolate({
+                    inputRange: [0, 100],
+                    outputRange: ["0%", "100%"],
+                  }),
+                },
+              ]}
+            />
+          </View>
         </View>
-      )}
 
-      <View style={styles.progressContainer}>
-        <View
-          style={[styles.progressBackground, { borderColor: getBarColor() }]}
-        >
-          <Animated.View
-            style={[
-              styles.progressBar,
-              {
-                backgroundColor: getBarColor(),
-                width: animatedWidth.interpolate({
-                  inputRange: [0, 100],
-                  outputRange: ["0%", "100%"],
-                }),
-              },
-            ]}
-          />
-        </View>
+        {isDanger && (
+          <Text style={styles.urgentText}>⚠️ Time Running Out!</Text>
+        )}
       </View>
-
-      {isDanger && <Text style={styles.urgentText}>⚠️ Time Running Out!</Text>}
-    </View>
-  );
-};
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {

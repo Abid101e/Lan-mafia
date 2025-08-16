@@ -26,6 +26,49 @@ const gameDiscovery = require("./utils/gameDiscovery");
 // Global timer tracking
 let currentPhaseTimer = null;
 
+// Helper function to safely clear timers
+const clearGameTimer = () => {
+  if (currentPhaseTimer) {
+    console.log("🧹 Clearing game timer");
+    clearInterval(currentPhaseTimer);
+    currentPhaseTimer = null;
+  }
+};
+
+// Helper functions for common operations
+const helpers = {
+  // Emit to all players with error handling
+  emitToAll: (io, event, data) => {
+    try {
+      io.emit(event, data);
+    } catch (error) {
+      logger.error(`Failed to emit ${event}:`, error);
+    }
+  },
+
+  // Get current players safely
+  getCurrentPlayers: () => {
+    try {
+      return gameState.getPlayers();
+    } catch (error) {
+      logger.error("Error getting players:", error);
+      return [];
+    }
+  },
+
+  // Validate player exists and is host
+  validateHost: (socket) => {
+    const player = gameState.getPlayerBySocketId(socket.id);
+    return player && gameState.isHost(socket.id);
+  },
+
+  // Emit player list to all clients
+  broadcastPlayerUpdate: (io) => {
+    const players = helpers.getCurrentPlayers();
+    helpers.emitToAll(io, "playersUpdated", players);
+  },
+};
+
 const {
   validatePlayerName,
   validateGameSettings,
@@ -62,6 +105,9 @@ function setupSocketEvents(io) {
         }
 
         logger.game(`${nameValidation.sanitizedName} is hosting a new game`);
+
+        // Clear any existing timers before starting new game
+        clearGameTimer();
 
         // Initialize new game
         gameState.resetGame();
@@ -171,6 +217,33 @@ function setupSocketEvents(io) {
       }
     });
 
+    // Get current game result (for win screen)
+    socket.on("getGameResult", () => {
+      try {
+        console.log("getGameResult request received from socket:", socket.id);
+        const currentPhase = gameState.getCurrentPhase();
+
+        if (currentPhase === "game_over") {
+          // Check if we have a stored game result
+          const players = gameState.getPlayers();
+          const winCheck = gameLogic.checkWinCondition(players);
+
+          if (winCheck.gameOver) {
+            const gameOverData = {
+              winner: winCheck.winner,
+              reason: winCheck.reason,
+              players: players,
+            };
+
+            console.log("Sending game result to client:", gameOverData);
+            socket.emit("gameOver", gameOverData);
+          }
+        }
+      } catch (error) {
+        handleSocketError(socket, error, "getGameResult");
+      }
+    });
+
     // Get current player's role
     socket.on("getCurrentRole", () => {
       try {
@@ -248,8 +321,8 @@ function setupSocketEvents(io) {
         );
         gameState.setRoleAssignments(roleAssignments);
 
-        // Update game phase
-        gameState.setPhase("role_reveal");
+        // Update game phase - skip role reveal, go directly to night
+        gameState.setPhase("night");
 
         // Send role assignments to each player
         roleAssignments.forEach((assignment) => {
@@ -259,16 +332,14 @@ function setupSocketEvents(io) {
           }
         });
 
-        // Broadcast game start
+        // Broadcast game start with night phase
         io.emit("gameStarted", {
-          phase: "role_reveal",
+          phase: "night",
           settings: gameSettings,
         });
 
-        // Start role reveal timer
-        setTimeout(() => {
-          startNightPhase(io);
-        }, 10000); // 10 seconds for role reveal
+        // Start night phase immediately
+        startNightPhase(io);
       } catch (error) {
         handleSocketError(socket, error, "startGame");
       }
@@ -279,7 +350,7 @@ function setupSocketEvents(io) {
       try {
         const { action, target } = data;
         console.log(
-          `🌙 Night action received: ${action} on ${target} from socket ${socket.id}`
+          `Night action received: ${action} on ${target} from socket ${socket.id}`
         );
 
         const player = gameState.getPlayerBySocketId(socket.id);
@@ -289,7 +360,7 @@ function setupSocketEvents(io) {
         }
 
         console.log(
-          `🌙 Player ${player.name} (${player.role}) wants to ${action} ${target}`
+          `Player ${player.name} (${player.role}) wants to ${action} ${target}`
         );
 
         if (!player.isAlive) {
@@ -508,6 +579,95 @@ function setupSocketEvents(io) {
       }
     });
 
+    // Continue game from results screen
+    socket.on("continueGame", () => {
+      try {
+        console.log("🎮 Player requested to continue game");
+        const currentPhase = gameState.getPhase();
+
+        if (currentPhase === "results") {
+          console.log("🎮 Continuing from results to next night phase");
+          // Clear the auto-continue timer if it exists
+          if (currentPhaseTimer) {
+            clearTimeout(currentPhaseTimer);
+            currentPhaseTimer = null;
+            console.log("⏰ Cleared auto-continue timer");
+          }
+          startNightPhase(io);
+        } else {
+          console.log(
+            "🎮 Continue game requested but not in results phase:",
+            currentPhase
+          );
+        }
+      } catch (error) {
+        handleSocketError(socket, error, "continueGame");
+      }
+    });
+
+    // Player leaving game
+    socket.on("leaveGame", () => {
+      try {
+        console.log("👋 Player leaving game:", socket.id);
+        const player = gameState.getPlayerBySocketId(socket.id);
+
+        if (player) {
+          logger.game(`${player.name} is leaving the game`);
+          gameState.removePlayer(socket.id);
+
+          // Broadcast updated player list
+          helpers.broadcastPlayerUpdate(io);
+
+          // Check if game should end due to insufficient players
+          const remainingPlayers = gameState.getPlayers();
+          if (remainingPlayers.length < 3 && gameState.getPhase() !== "lobby") {
+            console.log("🏁 Game ending due to insufficient players");
+            endGame(io, {
+              winner: "none",
+              reason: "Game ended due to insufficient players",
+              gameOver: true,
+            });
+          }
+        }
+      } catch (error) {
+        handleSocketError(socket, error, "leaveGame");
+      }
+    });
+
+    // Restart game
+    socket.on("restartGame", () => {
+      try {
+        const player = gameState.getPlayerBySocketId(socket.id);
+
+        if (!player || !gameState.isHost(socket.id)) {
+          throw createPermissionError("Only the host can restart the game");
+        }
+
+        console.log("🔄 Host restarting game");
+        logger.game(`${player.name} (host) is restarting the game`);
+
+        // Clear any running timers
+        clearGameTimer();
+
+        // Reset game state but keep players
+        const currentPlayers = gameState.getPlayers();
+        gameState.resetGame();
+
+        // Re-add players (keep the host)
+        currentPlayers.forEach((p) => {
+          gameState.addPlayer(p.socketId, p.name, p.isHost);
+        });
+
+        // Broadcast reset
+        io.emit("gameReset");
+        io.emit("playersUpdated", gameState.getPlayers());
+
+        console.log("🔄 Game reset completed");
+      } catch (error) {
+        handleSocketError(socket, error, "restartGame");
+      }
+    });
+
     socket.on("joinGameByCode", (data) => {
       try {
         const { gameCode, playerName } = data;
@@ -586,6 +746,10 @@ function setupSocketEvents(io) {
         // If host disconnected, handle host transfer or game end
         if (gameState.isHost(socket.id)) {
           logger.game("Host disconnected - ending game");
+
+          // Clear any running timers
+          clearGameTimer();
+
           io.emit("hostDisconnected", { message: "Host left the game" });
           gameState.resetGame();
         } else {
@@ -760,8 +924,20 @@ function startVotingPhase(io) {
   gameState.setPhase("voting");
   gameState.clearVotes();
 
+  const players = gameState.getPlayers();
+  console.log(
+    "🗳️ VOTING PHASE DEBUG - Players data:",
+    players.map((p) => ({
+      name: p.name,
+      id: p.id,
+      socketId: p.socketId,
+      isAlive: p.isAlive,
+      isHost: p.isHost,
+    }))
+  );
+
   io.emit("gamePhaseChanged", "voting");
-  io.emit("playersUpdated", gameState.getPlayers());
+  io.emit("playersUpdated", players);
 
   // Start voting timer
   const currentSettings = settings.getCurrentSettings();
@@ -803,7 +979,8 @@ function processVotingPhase(io) {
   io.emit("playersUpdated", gameState.getPlayers());
 
   // Auto-continue to next night after delay
-  setTimeout(() => {
+  currentPhaseTimer = setTimeout(() => {
+    console.log("⏰ Results phase auto-continuing to night phase");
     startNightPhase(io);
   }, 5000);
 }
@@ -815,6 +992,9 @@ function endGame(io, winResult) {
   console.log("🏁 endGame called with result:", winResult);
   logger.game(`Game over - ${winResult.winner} wins!`);
 
+  // Clear any running timers
+  clearGameTimer();
+
   gameState.setPhase("game_over");
   console.log("🏁 Game phase set to game_over");
 
@@ -824,8 +1004,22 @@ function endGame(io, winResult) {
     players: gameState.getPlayers(),
   };
 
+  console.log("🏁 Emitting gamePhaseChanged to game_over and gameOver event");
+  io.emit("gamePhaseChanged", "game_over");
+  
   console.log("🏁 Emitting gameOver event with data:", gameOverData);
   io.emit("gameOver", gameOverData);
+
+  // Emit multiple times to ensure all clients receive it
+  setTimeout(() => {
+    console.log("🏁 Re-emitting gameOver event (backup)");
+    io.emit("gameOver", gameOverData);
+  }, 1000);
+
+  setTimeout(() => {
+    console.log("🏁 Re-emitting gameOver event (backup 2)");
+    io.emit("gameOver", gameOverData);
+  }, 2000);
 
   console.log("🏁 Game over event emitted successfully");
 
@@ -843,11 +1037,7 @@ function startPhaseTimer(io, duration, onComplete) {
   console.log("⏰ Starting phase timer with duration:", duration);
 
   // Clear any existing timer first
-  if (currentPhaseTimer) {
-    console.log("⏰ Clearing previous timer");
-    clearInterval(currentPhaseTimer);
-    currentPhaseTimer = null;
-  }
+  clearGameTimer();
 
   if (!duration || duration <= 0) {
     console.log("❌ Invalid timer duration:", duration);

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,16 +9,33 @@ import {
   StatusBar,
 } from "react-native";
 
-const { width, height } = Dimensions.get("window");
+// Cache dimensions to avoid repeated calls
+const screenDimensions = Dimensions.get("window");
+const { width, height } = screenDimensions;
 
-export default function HomeScreen({ navigation }) {
-  const handleHostGame = () => {
+export default React.memo(function HomeScreen({ navigation }) {
+  const handleHostGame = useCallback(() => {
     navigation.navigate("HostLobby");
-  };
+  }, [navigation]);
 
-  const handleJoinGame = () => {
+  const handleJoinGame = useCallback(() => {
     navigation.navigate("JoinGame");
-  };
+  }, [navigation]);
+
+  // Memoize static content that doesn't change
+  const logoSection = useMemo(
+    () => (
+      <View style={styles.titleSection}>
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoEmoji}>🎭</Text>
+        </View>
+        <Text style={styles.title}>LAN MAFIA</Text>
+        <Text style={styles.subtitle}>The Ultimate Deception Game</Text>
+        <View style={styles.decorativeLine} />
+      </View>
+    ),
+    []
+  );
 
   return (
     <>
@@ -37,14 +54,7 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.content}>
           {/* Logo and Title Section */}
-          <View style={styles.titleSection}>
-            <View style={styles.logoContainer}>
-              <Text style={styles.logoEmoji}>🎭</Text>
-            </View>
-            <Text style={styles.title}>LAN MAFIA</Text>
-            <Text style={styles.subtitle}>The Ultimate Deception Game</Text>
-            <View style={styles.decorativeLine} />
-          </View>
+          {logoSection}
 
           {/* Action Buttons */}
           <View style={styles.buttonSection}>
@@ -100,7 +110,7 @@ export default function HomeScreen({ navigation }) {
       </ImageBackground>
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
