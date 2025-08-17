@@ -10,16 +10,18 @@
  * - Connection state tracking
  * - Error handling and reconnection
  * - Host discovery and connection
+ * - Automatic IP detection
  */
 /**
  * Initializes and exports the Socket.IO client connection.
  * Handles:
- * - Connection to host device using local IP
+ * - Connection to host device using automatic IP detection
  * - Emitting player actions
  * - Listening for game updates, role data, and phase changes
  */
 
 import { io } from "socket.io-client";
+import { networkDiscovery } from "./networkDiscovery";
 
 class SocketManager {
   constructor() {
@@ -30,6 +32,51 @@ class SocketManager {
     this._eventHandlers = new Map();
     this._connectionCache = new Map();
     this._reconnectTimeout = null;
+    // Custom event emitter for manager-level events
+    this._customEventListeners = new Map();
+  }
+
+  /**
+   * Add a custom event listener for manager-level events
+   * @param {string} event - Event name
+   * @param {function} callback - Callback function
+   */
+  addCustomListener(event, callback) {
+    if (!this._customEventListeners.has(event)) {
+      this._customEventListeners.set(event, []);
+    }
+    this._customEventListeners.get(event).push(callback);
+  }
+
+  /**
+   * Remove a custom event listener
+   * @param {string} event - Event name
+   * @param {function} callback - Callback function to remove
+   */
+  removeCustomListener(event, callback) {
+    if (!this._customEventListeners.has(event)) return;
+    const listeners = this._customEventListeners.get(event);
+    const index = listeners.indexOf(callback);
+    if (index > -1) {
+      listeners.splice(index, 1);
+    }
+  }
+
+  /**
+   * Emit a custom event
+   * @param {string} event - Event name
+   * @param {*} data - Data to emit
+   */
+  emitCustomEvent(event, data) {
+    if (!this._customEventListeners.has(event)) return;
+    const listeners = this._customEventListeners.get(event);
+    listeners.forEach((callback) => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`Error in custom event listener for ${event}:`, error);
+      }
+    });
   }
 
   /**
@@ -137,25 +184,107 @@ class SocketManager {
   }
 
   /**
-   * Scan for available games on local network
+   * Scan for available games on local network with automatic IP detection
    */
-  scanForGames() {
+  async scanForGames() {
     if (this.socket && this.isConnected) {
       console.log("Scanning for games on connected socket...");
       this.socket.emit("scanForGames");
-    } else {
-      // If not connected, try connecting to your machine's IP first
-      console.log("Not connected, attempting to connect first...");
-      this.connect("10.220.54.130"); // Use correct IP
-      setTimeout(() => {
-        if (this.socket && this.isConnected) {
-          console.log("Connected, now scanning for games...");
-          this.socket.emit("scanForGames");
-        } else {
-          console.log("Failed to connect for game scanning");
-        }
-      }, 2000); // Increased timeout
+      return;
     }
+
+    console.log("Not connected, starting network game discovery...");
+
+    try {
+      // Use comprehensive game scanning
+      const discoveredGames = await networkDiscovery.scanForGamesOnNetwork();
+
+      if (discoveredGames.length === 0) {
+        console.log("❌ No games found on the network");
+        this.emitCustomEvent("gameListUpdated", []);
+        this.emitCustomEvent("noHostsFound");
+        return;
+      }
+
+      console.log(
+        `🎮 Found ${discoveredGames.length} game(s):`,
+        discoveredGames
+      );
+
+      // Emit the games list to the UI
+      this.emitCustomEvent("gameListUpdated", discoveredGames);
+
+      // Try connecting to the first available game host
+      const firstGame = discoveredGames[0];
+      const hostIP = firstGame.hostIP || firstGame.discoveredAt;
+
+      if (hostIP) {
+        console.log(`🎯 Auto-connecting to game host: ${hostIP}`);
+        this.connect(hostIP);
+
+        // Wait for connection and setup
+        setTimeout(() => {
+          if (this.socket && this.isConnected) {
+            console.log("✅ Auto-connected to game host successfully");
+            // Re-emit scanForGames to get updated list via socket
+            this.socket.emit("scanForGames");
+          } else {
+            console.log(
+              "❌ Failed to auto-connect, but games are available for manual connection"
+            );
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("🚨 Error during game discovery:", error);
+      this.emitCustomEvent("gameListUpdated", []);
+      this.fallbackToManualConnection();
+    }
+  }
+
+  /**
+   * Try connecting to alternative hosts if the best host fails
+   */
+  async tryAlternativeHosts(alternativeHosts) {
+    for (const hostIP of alternativeHosts) {
+      try {
+        console.log(`🔄 Trying alternative host: ${hostIP}`);
+        this.connect(hostIP);
+
+        // Wait and check if connection succeeded
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        if (this.socket && this.isConnected) {
+          console.log(
+            `✅ Successfully connected to alternative host: ${hostIP}`
+          );
+          this.socket.emit("scanForGames");
+          return;
+        }
+      } catch (error) {
+        console.log(`❌ Failed to connect to ${hostIP}:`, error.message);
+      }
+    }
+
+    console.log("❌ All discovered hosts failed, trying fallback connection");
+    this.fallbackToManualConnection();
+  }
+
+  /**
+   * Fallback to manual connection attempt with common IPs
+   */
+  fallbackToManualConnection() {
+    console.log("🔧 Falling back to manual connection attempt...");
+    // Use localhost as last resort
+    this.connect("localhost");
+    setTimeout(() => {
+      if (this.socket && this.isConnected) {
+        console.log("Connected via fallback, scanning for games...");
+        this.socket.emit("scanForGames");
+      } else {
+        console.log("❌ All connection attempts failed");
+      }
+    }, 2000);
   }
 
   /**
@@ -183,25 +312,55 @@ class SocketManager {
   }
 
   /**
-   * Listen for events from server
+   * Listen for events from server or custom manager events
    * @param {string} event - Event name
    * @param {function} callback - Event handler function
    */
   on(event, callback) {
+    // Handle custom manager events
+    if (
+      event === "noHostsFound" ||
+      event === "hostDiscoveryStarted" ||
+      event === "hostDiscoveryComplete" ||
+      event === "gameListUpdated"
+    ) {
+      this.addCustomListener(event, callback);
+      return;
+    }
+
+    // Handle regular socket events
     if (this.socket) {
       this.socket.on(event, callback);
+    } else {
+      // Store the listener for when socket is created
+      this.addCustomListener(`pending_${event}`, callback);
     }
   }
 
   /**
-   * Remove event listener
+   * Remove event listener for both socket and custom events
    * @param {string} event - Event name
    * @param {function} callback - Event handler function (optional)
    */
   off(event, callback) {
+    // Handle custom manager events
+    if (
+      event === "noHostsFound" ||
+      event === "hostDiscoveryStarted" ||
+      event === "hostDiscoveryComplete" ||
+      event === "gameListUpdated"
+    ) {
+      this.removeCustomListener(event, callback);
+      return;
+    }
+
+    // Handle regular socket events
     if (this.socket) {
       this.socket.off(event, callback);
     }
+
+    // Also remove pending listeners
+    this.removeCustomListener(`pending_${event}`, callback);
   }
 
   /**

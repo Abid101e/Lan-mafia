@@ -123,6 +123,11 @@ class GameState {
     return this.getPlayerBySocketId(this.hostId);
   }
 
+  getHostName() {
+    const host = this.getHost();
+    return host ? host.name : "Unknown Host";
+  }
+
   // Ready status management
   setPlayerReady(socketId) {
     const player = this.getPlayerBySocketId(socketId);

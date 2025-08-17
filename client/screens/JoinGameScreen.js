@@ -34,6 +34,16 @@ export default React.memo(function JoinGameScreen({ navigation }) {
     Alert.alert("Join Error", error.message);
   }, []);
 
+  const handleNoHostsFound = useCallback(() => {
+    setIsScanning(false);
+    setIsRefreshing(false);
+    Alert.alert(
+      "No Game Hosts Found",
+      "No game servers were found on your network. Make sure:\n\n• The host has started a game\n• You're connected to the same WiFi network\n• The host's device is not blocking connections",
+      [{ text: "Try Again", onPress: handleRefresh }, { text: "OK" }]
+    );
+  }, [handleRefresh]);
+
   const scanForGames = useCallback(() => {
     setIsScanning(true);
     socket.scanForGames();
@@ -57,13 +67,15 @@ export default React.memo(function JoinGameScreen({ navigation }) {
     });
 
     socket.on("joinError", handleJoinError);
+    socket.on("noHostsFound", handleNoHostsFound);
 
     return () => {
       socket.off("gameListUpdated", handleGameListUpdated);
       socket.off("joinedGame");
       socket.off("joinError", handleJoinError);
+      socket.off("noHostsFound", handleNoHostsFound);
     };
-  }, [scanForGames, handleGameListUpdated, handleJoinError]);
+  }, [scanForGames, handleGameListUpdated, handleJoinError, handleNoHostsFound]);
 
   const handleJoinGame = useCallback(
     async (game) => {

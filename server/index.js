@@ -73,6 +73,64 @@ app.get("/", (req, res) => {
   }
 });
 
+// Dedicated health check endpoint for network discovery
+app.get("/health", (req, res) => {
+  try {
+    res.json({
+      status: "healthy",
+      service: "lan-mafia-game",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+});
+
+// HTTP-based game discovery endpoint for mobile clients
+app.get("/discover-games", (req, res) => {
+  try {
+    const games = [];
+
+    // If this server is hosting a game, include it
+    if (gameState.isGameActive() || gameState.getPlayerCount() > 0) {
+      const localIP = getLocalIPAddress()[0] || "localhost";
+      games.push({
+        gameCode:
+          gameState.getGameCode() ||
+          "GAME-" + Math.random().toString(36).substr(2, 4).toUpperCase(),
+        hostName: gameState.getHostName() || "Host",
+        playerCount: gameState.getPlayerCount(),
+        maxPlayers: gameState.getSettings().maxPlayers || 8,
+        status:
+          gameState.getCurrentPhase() === "waiting" ? "waiting" : "in-progress",
+        hostIP: localIP,
+        port: 3000,
+        timestamp: Date.now(),
+      });
+    }
+
+    res.json({
+      success: true,
+      games: games,
+      serverInfo: {
+        ip: getLocalIPAddress(),
+        port: 3000,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      games: [],
+    });
+  }
+});
+
 // Get current game state endpoint
 app.get("/game-state", (req, res) => {
   try {

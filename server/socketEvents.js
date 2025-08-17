@@ -1006,7 +1006,7 @@ function endGame(io, winResult) {
 
   console.log("🏁 Emitting gamePhaseChanged to game_over and gameOver event");
   io.emit("gamePhaseChanged", "game_over");
-  
+
   console.log("🏁 Emitting gameOver event with data:", gameOverData);
   io.emit("gameOver", gameOverData);
 

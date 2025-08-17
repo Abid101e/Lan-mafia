@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from "react-native";
 import { socket } from "../utils/socket";
+import { networkDiscovery } from "../utils/networkDiscovery";
 import PlayerCard from "../components/PlayerCard";
 
 // Cache dimensions
@@ -192,18 +193,33 @@ export default React.memo(function HostLobbyScreen({ navigation, route }) {
     setIsConnecting(true);
 
     try {
-      // Try multiple IP addresses for connection
-      const possibleIPs = [
-        "192.168.54.91", // PPP connection
-        "10.220.54.130", // Ethernet connection
-        "localhost", // Fallback for simulator
-        "127.0.0.1", // Another localhost fallback
-      ];
+      console.log("🔍 Starting automatic host discovery...");
+
+      // First try quick scan for common host IPs
+      let discoveredHosts = await networkDiscovery.quickScan();
+
+      // If quick scan found nothing, try full network scan
+      if (discoveredHosts.length === 0) {
+        console.log("Quick scan found no hosts, trying full network scan...");
+        discoveredHosts = await networkDiscovery.scanForHosts();
+      }
+
+      // Add localhost fallbacks
+      const fallbackIPs = ["localhost", "127.0.0.1"];
+      const allPossibleIPs = [...discoveredHosts, ...fallbackIPs];
+
+      if (allPossibleIPs.length === 0) {
+        throw new Error("No network interfaces available for hosting");
+      }
 
       let connected = false;
       let lastError = null;
 
-      for (const ip of possibleIPs) {
+      console.log(
+        `🎯 Attempting to connect to ${allPossibleIPs.length} discovered hosts...`
+      );
+
+      for (const ip of allPossibleIPs) {
         if (connected) break;
 
         try {
@@ -218,7 +234,7 @@ export default React.memo(function HostLobbyScreen({ navigation, route }) {
 
             const handleConnect = () => {
               clearTimeout(timeout);
-              console.log(`Successfully connected to ${ip}!`);
+              console.log(`✅ Successfully connected to ${ip}!`);
               setupSocketListeners();
               connected = true;
               resolve();
@@ -233,14 +249,17 @@ export default React.memo(function HostLobbyScreen({ navigation, route }) {
             socket.socket.on("connect_error", handleError);
           });
         } catch (error) {
-          console.log(`Failed to connect to ${ip}:`, error.message);
+          console.log(`❌ Failed to connect to ${ip}:`, error.message);
           lastError = error;
           continue;
         }
       }
 
       if (!connected) {
-        throw lastError || new Error("Could not connect to any server address");
+        throw (
+          lastError ||
+          new Error("Could not connect to any discovered server address")
+        );
       }
 
       // Now emit the hostGame event directly on the socket instance
